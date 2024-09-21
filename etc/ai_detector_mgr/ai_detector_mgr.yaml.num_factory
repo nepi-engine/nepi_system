@@ -1,0 +1,5 @@
+default_classifier: None    # Set value "None" for no default classifier
+default_image: None         # Set value "None" for no default image. Image topic must include complete namespace
+default_threshold: 0.3      # Detection threshold (0.0 - 1.0); larger value means higher confidence required to register detection
+save_data_continuous: false # true ==> Every change to a configurable parameters is saved to file
+save_data_raw: false        # No effect for this node. No raw data defined

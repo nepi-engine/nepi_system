@@ -1,0 +1,4 @@
+discovery_interval_s: 10
+autosave_cfg_changes: True   # Normal save mechanism does not work for this NEPI node, so this is usually desirable
+
+# onvif_devices: Intentionally blank, no reasonable defaults because UUID of each device is included

@@ -1,0 +1,4 @@
+op_environment: air                                      # "air" or "water". Controls the ZED camera calibration selected at start-up.
+storage_mountpoint: /mnt/nepi_storage                    # Specifies where the NEPI user partition is/should be mounted
+auto_switch_rootfs_on_new_img_install: true              # Specifies whether or not to automatically switch active/inactive rootfs definitions on successful image install
+

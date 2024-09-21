@@ -1,0 +1,1 @@
+init_time_from_rtc: true                # Set system clock from hardware clock (RTC) on start-up 

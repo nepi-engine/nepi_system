@@ -1,0 +1,6 @@
+display_name: gpsd_ros_client
+gpsd_ip: localhost                                     # IP address/resolvable host of the GPSD instance (localhost for NEPI-provided GPSD server)
+gpsd_port: 3322                                        # GPSD server port (3322 for UDP-listening build, 2947 for standard hot-pluggable GPSD)
+gps_frame_id: base_link                                # Transfer frame ID to report in GPS fix messages
+orientation_frame_id: nepi_center_frame                # Transfer frame ID to report in odometry messages
+provides_orientation: true                             # If true, node publishes orientation messages (when available); if false, messages are suppressed

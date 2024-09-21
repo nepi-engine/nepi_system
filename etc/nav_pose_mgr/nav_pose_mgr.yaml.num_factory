@@ -1,0 +1,32 @@
+display_name: nav_pose_mgr                             # User-friendly name for display purposes
+gps_fix_topic: 'gps_fix'                               # GPS fix topic w.r.t. base namespace
+orientation_topic: 'odom'                                     # Odometry topic w.r.t. base namespace
+heading_topic: 'heading'                               # Heading topic w.r.t. base namespace
+save_data_continuous: false                            # true ==> Every change to a configurable parameters is saved to file
+save_data_raw: false                                   # No effect for this node. No raw data defined
+ahrs_offset:                                           # Transform parameters for ahrs/imu source
+  x_m:              0.0                                # x-axis translation in meters from AHRS source to ahrs_out_frame_id
+  y_m:              0.0                                # y-axis translation in meters from AHRS source to ahrs_out_frame_id
+  z_m:              0.0                                # x-axis translation in meters from AHRS source to ahrs_out_frame_id
+  x_rot_deg:        0.0                                # x-axis rotation in degrees from AHRS source to ahrs_out_frame_id
+  y_rot_deg:        0.0                                # y-axis rotation in degrees from AHRS source to ahrs_out_frame_id
+  z_rot_deg:        0.0                                # z-axis rotation in degrees from AHRS source to ahrs_out_frame_id
+  heading_offset_deg: 0.0                              # Additive heading offset from AHRS source to ahrs_out_frame_id
+ahrs_out_frame_id: 'nepi_center_frame'                 # TF into which AHRS/IMU data should be transformed
+init_data:                                             # Settings for initial (non-updating) GPS, attitude, and heading
+  lat_deg:        0.0                                  # init latitude in degrees
+  lon_deg:        0.0                                  # init longitude in degrees
+  alt_m_hae:      0.0                                  # init altitude in meters above ellipsoid
+  position_x:     0.0                                  # Init position x in meters
+  position_y:     0.0                                  # Init position y in meters
+  position_z:     0.0                                  # Init position z in meters
+  orientation_x:  0.0                                  # Init x (i) component of orientation quaternion
+  orientation_y:  0.0                                  # Init y (j) component of orientation quaternion
+  orientation_z:  0.0                                  # Init z (k) component of orientation quaternion
+  orientation_w:  1.0                                  # Init w (scalar) component of orientation quaternion
+  heading_deg:    0.0                                  # Init heading in degrees
+
+soft_sync_time_to_gps_topic: false                   # If true, system time will be adjusted according to input GPS fix timestamps (not as accurate as NTP)
+max_gps_clock_drift_s: 0.25                          # Max allowed drift before system time readjusted to GPS fix time (if soft_sync_time_to_gps_topic is true)
+
+broadcast_odom_tf: true                              # If true, Odometry data is used to publish a TF transform

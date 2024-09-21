@@ -1,0 +1,3 @@
+
+streaming_image_quality: 95                   # Image quality for images from web_video_server (1 = lowest, 100 = highest), lower values reduce bandwidth
+nepi_hb_auto_offload_visible: false             # Whether HB auto offload checkbox is displayed in RUI
