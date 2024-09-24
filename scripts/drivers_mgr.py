@@ -56,7 +56,7 @@ class NepiDriversMgr(object):
 
   discovery_active_dict = dict()
 
-  selected_driver = "None"
+  selected_driver = "NONE"
   active_paths_list = [] 
   imported_classes_dict = dict()
 
@@ -214,9 +214,9 @@ class NepiDriversMgr(object):
     nex_database = rospy.get_param("~nex_database",self.init_nex_database)
     driver_name = self.selected_driver
     status_driver_msg = DriverStatus()
-    if driver_name in nex_database.keys():
+    status_driver_msg.name = driver_name
+    if driver_name in nex_database.keys() and driver_name != 'NONE':
       driver = nex_database[driver_name]
-      status_driver_msg.name = driver_name
       status_driver_msg.group = driver['group']
       status_driver_msg.group_id  = driver['group_id']
       status_driver_msg.interfaces  = str(driver['driver_interfaces'])
@@ -230,6 +230,7 @@ class NepiDriversMgr(object):
       status_driver_msg.other_users_list  = str(driver['users'])
       status_driver_msg.active_state  = driver['active']
       status_driver_msg.order  = driver['order']
+      status_driver_msg.description = driver['description']
       status_driver_msg.msg_str = driver['msg']
     return status_driver_msg
 
@@ -474,7 +475,7 @@ class NepiDriversMgr(object):
     pkg_name = msg.data
     nex_database = rospy.get_param("~nex_database",self.init_nex_database)
     if pkg_name in self.drivers_install_files:
-      nex_database = nepi_nex.installDriverPkg(pkg_name,nex_database,self.drivers_install_folder,self.drivers_folder)
+     [success,nex_database]  = nepi_nex.installDriverPkg(pkg_name,nex_database,self.drivers_install_folder,self.drivers_folder)
     rospy.set_param("~nex_database",nex_database)
     self.publish_status()
 
@@ -487,7 +488,7 @@ class NepiDriversMgr(object):
     if backup_enabled:
       backup_folder = self.drivers_install_folder
     if driver_name in nex_database:
-      nex_database = nepi_nex.removeDriver(driver_name,nex_database,backup_folder)
+      [success,nex_database] = nepi_nex.removeDriver(driver_name,nex_database,backup_folder)
     rospy.set_param("~nex_database",nex_database)
     self.publish_status()
 
@@ -544,6 +545,7 @@ class NepiDriversMgr(object):
     pass
     
   def initParamServerValues(self,do_updates = True):
+      self.selected_driver = 'NONE'
       self.publishMsg("Setting init values to param values")
       self.init_backup_enabled = rospy.get_param("~backup_enabled", True)
       self.drivers_files = nepi_nex.getDriverFilesList(self.drivers_folder)
