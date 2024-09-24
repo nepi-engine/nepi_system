@@ -268,8 +268,7 @@ class NepiDriversMgr(object):
     for i in range(len(node_namespace_list)):
       node_list.append(node_namespace_list[i].split("/")[-1])
 
-    ###############################
-    # Check and process active driver list entries:
+    ###############################installDriverPkgCb
     #self.publishMsg(node_list,level = "WARN")
     for nex_name in self.drivers_ordered_list:
       if nex_name in self.drivers_active_list:
@@ -453,7 +452,7 @@ class NepiDriversMgr(object):
       driver = nex_database[driver_name]
       options = driver['driver_options_1']
       if option in options:
-        driver['driver_set_option_1'] = option
+        nex_database[driver_name]['driver_set_option_1'] = option
     rospy.set_param("~nex_database",nex_database)
     self.publish_status()
 
@@ -466,7 +465,7 @@ class NepiDriversMgr(object):
       driver = nex_database[driver_name]
       options = driver['driver_options_2']
       if option in options:
-        driver['driver_set_option_2'] = option
+        nex_database[driver_name]['driver_set_option_2'] = option
     rospy.set_param("~nex_database",nex_database)
     self.publish_status()
 
@@ -481,7 +480,7 @@ class NepiDriversMgr(object):
 
   def removeDriverCb(self,msg):
     self.publishMsg(msg)
-    diver_name = msg.data
+    driver_name = msg.data
     nex_database = rospy.get_param("~nex_database",self.init_nex_database)
     backup_folder = None
     backup_enabled = rospy.get_param("~backup_enabled",self.init_backup_enabled)
@@ -541,9 +540,9 @@ class NepiDriversMgr(object):
   def updateFromParamServer(self):
     #rospy.logwarn("DRV_MGR: Debugging: param_dict = " + str(param_dict))
     #Run any functions that need updating on value change
-    # Don't need to run any additional functions
+    # Don't need to run any additional functionsinstallDriverPkgCb
     pass
-
+    
   def initParamServerValues(self,do_updates = True):
       self.publishMsg("Setting init values to param values")
       self.init_backup_enabled = rospy.get_param("~backup_enabled", True)
