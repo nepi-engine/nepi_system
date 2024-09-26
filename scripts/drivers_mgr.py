@@ -24,7 +24,7 @@ from nepi_edge_sdk_base import nepi_ros
 from nepi_edge_sdk_base import nepi_nex
 
 from std_msgs.msg import Empty, String, Int32, Bool, Header
-from nepi_ros_interfaces.msg import DriversStatus, DriverStatus, DriverUpdateState, DriverUpdateOrder, DriverUpdateOption #, DriverUpdateMsg
+from nepi_ros_interfaces.msg import DriversStatus, DriverStatus, UpdateState, UpdateOrder, UpdateOption #, DriverUpdateMsg
 from nepi_ros_interfaces.srv import SystemStorageFolderQuery, SystemStorageFolderQueryResponse
 
 from nepi_edge_sdk_base.save_cfg_if import SaveCfgIF
@@ -136,10 +136,10 @@ class NepiDriversMgr(object):
 
     # Drivers Management Scubscirbers
     rospy.Subscriber('~select_driver', String, self.selectDriverCb)
-    rospy.Subscriber('~update_state', DriverUpdateState, self.updateStateCb)
-    rospy.Subscriber('~update_order', DriverUpdateOrder, self.updateOrderCb)
-    rospy.Subscriber('~update_option_1', DriverUpdateOption, self.updateOption1Cb)
-    rospy.Subscriber('~update_option_2', DriverUpdateOption, self.updateOption2Cb)
+    rospy.Subscriber('~update_state', UpdateState, self.updateStateCb)
+    rospy.Subscriber('~update_order', UpdateOrder, self.updateOrderCb)
+    rospy.Subscriber('~update_option_1', UpdateOption, self.updateOption1Cb)
+    rospy.Subscriber('~update_option_2', UpdateOption, self.updateOption2Cb)
     #rospy.Subscriber('~select_driver_status', DriverUpdateMsg, self.updateMsgCb)
 
     rospy.Subscriber('~install_driver_pkg', String, self.installDriverPkgCb)
@@ -391,7 +391,7 @@ class NepiDriversMgr(object):
 
   def updateStateCb(self,msg):
     self.publishMsg(msg)
-    driver_name = msg.driver_name
+    driver_name = msg.name
     new_active_state = msg.active_state
     nex_database = rospy.get_param("~nex_database",self.init_nex_database)
     if driver_name in nex_database.keys():
@@ -408,7 +408,7 @@ class NepiDriversMgr(object):
 
   def updateOrderCb(self,msg):
     self.publishMsg(msg)
-    driver_name = msg.driver_name
+    driver_name = msg.name
     move_cmd = msg.move_cmd
     moveFunction = self.getOrderUpdateFunction(move_cmd)
     nex_database = rospy.get_param("~nex_database",self.init_nex_database)
@@ -436,7 +436,7 @@ class NepiDriversMgr(object):
     
   def updateMsgCb(self,msg):
     self.publishMsg(msg)
-    driver_name = msg.driver_name
+    driver_name = msg.name
     msg_data = msg.data
     nex_database = rospy.get_param("~nex_database",self.init_nex_database)
     if driver_name in nex_database.keys():
@@ -446,7 +446,7 @@ class NepiDriversMgr(object):
 
   def updateOption1Cb(self,msg):
     self.publishMsg(msg)
-    driver_name = msg.driver_name
+    driver_name = msg.name
     option = msg.option_str
     nex_database = rospy.get_param("~nex_database",self.init_nex_database)
     if driver_name in nex_database.keys():
@@ -459,7 +459,7 @@ class NepiDriversMgr(object):
 
   def updateOption2Cb(self,msg):
     self.publishMsg(msg)
-    driver_name = msg.driver_name
+    driver_name = msg.name
     option = msg.option_str
     nex_database = rospy.get_param("~nex_database",self.init_nex_database)
     if driver_name in nex_database.keys():
