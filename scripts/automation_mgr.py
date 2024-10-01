@@ -219,7 +219,7 @@ class AutomationManager:
 
     def on_file_change(self, file_path, file_deleted):
         script_name = os.path.basename(file_path)
-        rospy.loginfo("AUTO_MGR: File change detected: %s", os.path.basename(script_name))
+        #rospy.loginfo("AUTO_MGR: File change detected: %s", os.path.basename(script_name))
         
         #Update the scripts list
         self.scripts = self.get_scripts()
