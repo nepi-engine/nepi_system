@@ -196,6 +196,16 @@ class NepiAppsMgr(object):
     status_app_msg.name = app_name
     if app_name in apps_dict.keys() and app_name != 'NONE':
       app = apps_dict[app_name]
+
+      status_app_msg.pkg_name = app['pkg_name']
+      status_app_msg.node_name = app['node_name']
+      status_app_msg.app_file = app['app_file']
+      status_app_msg.app_path = app['app_path']   
+      status_app_msg.rui_files_list = str(app['rui_files_list'])
+      status_app_msg.rui_main_file = app['rui_main_file']
+      status_app_msg.rui_main_class = app['rui_main_class']  
+      status_app_msg.rui_menu_name = app['rui_menu_name']
+
       status_app_msg.active_state  = app['active']
       status_app_msg.order  = app['order']
       status_app_msg.description = app['description']
