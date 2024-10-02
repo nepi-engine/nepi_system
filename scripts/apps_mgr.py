@@ -88,7 +88,7 @@ class NepiAppsMgr(object):
         self.save_data_root_directory = response.folder_path
     except Exception as e:
         self.save_data_root_directory = APPS_INSTALL_FALLBACK_FOLDER
-        rospy.logwarn(self.node_name + "Failed to obtain system data folder, falling back to: " + APPS_INSTALL_FALLBACK_FOLDER + " " + str(e))
+        nepi_msg.publishMsgWarn(self,self.node_name + "Failed to obtain system data folder, falling back to: " + APPS_INSTALL_FALLBACK_FOLDER + " " + str(e))
     if os.path.exists(self.save_data_root_directory):
         self.apps_install_folder = self.save_data_root_directory
     else:
@@ -133,7 +133,7 @@ class NepiAppsMgr(object):
 
 
     # Setup a app folder timed check
-    rospy.Timer(rospy.Duration(1), self.checkAndUpdateCb, oneshot=True)
+    nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
     time.sleep(1)
     ## Publish Status
     self.publish_status()
@@ -142,9 +142,9 @@ class NepiAppsMgr(object):
     ## Initiation Complete
     nepi_msg.publishMsgInfo(self,"Initialization Complete")
     #Set up node shutdown
-    rospy.on_shutdown(self.cleanup_actions)
+    nepi_ros.on_shutdown(self.cleanup_actions)
     # Spin forever (until object is detected)
-    rospy.spin()
+    nepi_ros.spin()
     #########################################################
 
 
@@ -155,7 +155,7 @@ class NepiAppsMgr(object):
 
 
   def getAppStatusServiceMsg(self):
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     app_name = self.selected_app
     status_app_msg = AppStatusQueryResponse()
     status_app_msg.name = app_name
@@ -178,7 +178,7 @@ class NepiAppsMgr(object):
         
   # ln = sys._getframe().f_lineno ; 
   def printND(self):
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     nepi_msg.publishMsgInfo(self,'')
     nepi_msg.publishMsgInfo(self,'*******************')
     nepi_msg.publishMsgInfo(self,'Printing Apps Dictionary')
@@ -196,12 +196,12 @@ class NepiAppsMgr(object):
   def publish_apps_status(self):
     self.last_status_apps_msg = self.status_apps_msg
     self.status_apps_msg = self.getAppsStatusMsg()
-    if not rospy.is_shutdown():
+    if not nepi_ros.is_shutdown():
       self.apps_status_pub.publish(self.status_apps_msg)
     self.save_cfg_if.saveConfig(do_param_updates = False) # Save config after initialization for appt time
 
   def getAppsStatusMsg(self):
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     self.apps_ordered_list = nepi_apps.getAppsOrderedList(apps_dict)
     self.apps_active_list = nepi_apps.getAppsActiveOrderedList(apps_dict)
     status_apps_msg = AppsStatus()
@@ -212,19 +212,19 @@ class NepiAppsMgr(object):
     status_apps_msg.apps_install_list = self.apps_install_files
     status_apps_msg.apps_rui_list = nepi_apps.getAppsRuiActiveList(apps_dict)
     status_apps_msg.app_backup_path = self.apps_install_folder
-    status_apps_msg.backup_removed_apps = rospy.get_param("~backup_enabled",self.init_backup_enabled)
+    status_apps_msg.backup_removed_apps = nepi_ros.get_param(self,"~backup_enabled",self.init_backup_enabled)
     status_apps_msg.selected_app = self.selected_app
     return status_apps_msg
 
   
   def publish_app_status(self):
     self.status_app_msg = self.getAppStatusMsg()
-    if not rospy.is_shutdown():
+    if not nepi_ros.is_shutdown():
       self.app_status_pub.publish(self.status_app_msg)
 
 
   def getAppStatusMsg(self):
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     app_name = self.selected_app
     status_app_msg = AppStatus()
     status_app_msg.name = app_name
@@ -250,21 +250,21 @@ class NepiAppsMgr(object):
   def checkAndUpdateCb(self,_):
     ###############################
     ## First update Database
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
     need_update = self.apps_files != apps_files
     if need_update:
       nepi_msg.publishMsgInfo(self,"Need to Update App Database")
       try:
-        apps_dict = rospy.get_param("~apps_dict")
+        apps_dict = nepi_ros.get_param(self,"~apps_dict")
         apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
       except:
         apps_dict = nepi_apps.getAppsDict(self.apps_folder)
         apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
         apps_dict = nepi_apps.activateAllApps(apps_dict)
     #self.printND()
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.apps_files = apps_files
     self.apps_ordered_list = nepi_apps.getAppsOrderedList(apps_dict)
     self.apps_active_list = nepi_apps.getAppsActiveOrderedList(apps_dict)
@@ -298,7 +298,6 @@ class NepiAppsMgr(object):
 
 
     ###############################
-    #rospy.logwarn("DRV_MGR: App active dict: " + str(self.apps_active_dict.keys()))
     #nepi_msg.publishMsgInfo(self,node_list,level = "WARN")
     for app_name in self.apps_ordered_list:
       if app_name in self.apps_active_list and app_name in apps_dict.keys():
@@ -310,10 +309,6 @@ class NepiAppsMgr(object):
         app_path_name = app_dict['APP_DICT']['app_path']
         app_node_name = app_dict['APP_DICT']['node_name']
         app_file_path = app_path_name + '/' + app_file_name
-        #rospy.logwarn("DRV_MGR: Checking for running node: " + app_node_name)
-        # Check Auto-Node processes
-        #rospy.logwarn("DRV_MGR: Checking for Node: " + app_node_name)
-        #rospy.logwarn("DRV_MGR: Node List: " + str(node_list))
         if app_node_name not in node_list: #node_list:
           #Try and initialize app param values
           config_file_path = APPS_CONFIG_FALLBACK_FOLDER + "/" + app_config_file_name.split(".")[0] + "/" + app_config_file_name
@@ -341,7 +336,7 @@ class NepiAppsMgr(object):
     self.publish_status()
     # And now that we are finished, start a timer for the appt runDiscovery()
     nepi_ros.sleep(self.APP_UPDATE_CHECK_INTERVAL,100)
-    rospy.Timer(rospy.Duration(1), self.checkAndUpdateCb, oneshot=True)
+    nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
    
   
 
@@ -350,19 +345,19 @@ class NepiAppsMgr(object):
 
   def enableAllCb(self,msg):
     apps_dict = nepi_drv.activateAllApps(apps_dict)
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
   def disableAllCb(self,msg):
     apps_dict = nepi_drv.disableAllApps(apps_dict)
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
 
   def selectAppCb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     app_name = msg.data
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     if app_name in apps_dict.keys() or app_name == "NONE":
       self.selected_app = app_name
     self.publish_status()
@@ -371,7 +366,7 @@ class NepiAppsMgr(object):
     nepi_msg.publishMsgInfo(self,str(msg))
     app_name = msg.name
     new_active_state = msg.active_state
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     if app_name in apps_dict.keys():
       app = apps_dict[app_name]
       active_state = app['active']
@@ -380,7 +375,7 @@ class NepiAppsMgr(object):
         apps_dict = nepi_apps.activateApp(app_name,apps_dict)
       else:
         apps_dict = nepi_apps.disableApp(app_name,apps_dict)
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
 
@@ -389,10 +384,10 @@ class NepiAppsMgr(object):
     app_name = msg.name
     move_cmd = msg.move_cmd
     moveFunction = self.getOrderUpdateFunction(move_cmd)
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     if app_name in apps_dict.keys():
       apps_dict = moveFunction(app_name,apps_dict)
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
 
@@ -417,30 +412,30 @@ class NepiAppsMgr(object):
   def installAppPkgCb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     pkg_name = msg.data
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     if pkg_name in self.apps_install_files:
      [success,apps_dict]  = nepi_apps.installAppPkg(pkg_name,apps_dict,self.apps_install_folder,self.apps_folder)
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
   def removeAppCb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     app_name = msg.data
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     backup_folder = None
-    backup_enabled = rospy.get_param("~backup_enabled",self.init_backup_enabled)
+    backup_enabled = nepi_ros.get_param(self,"~backup_enabled",self.init_backup_enabled)
     if backup_enabled:
       backup_folder = self.apps_install_folder
     if app_name in apps_dict:
       [success,apps_dict] = nepi_apps.removeApp(app_name,apps_dict,backup_folder)
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
 
   def enableBackupCb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     backup_enabled = msg.data
-    rospy.set_param("~backup_enabled",backup_enabled)
+    nepi_ros.set_param(self,"~backup_enabled",backup_enabled)
     self.publish_status()
 
 
@@ -453,13 +448,13 @@ class NepiAppsMgr(object):
 
   def resetMgr(self):
     # reset apps dict
-    rospy.set_param("~backup_enabled",True)
+    nepi_ros.set_param(self,"~backup_enabled",True)
     self.apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
     apps_dict = nepi_apps.getAppsgetAppsDict(self.apps_folder)
     apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
     apps_dict = activateAllApps(apps_dict)
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
 
@@ -470,20 +465,19 @@ class NepiAppsMgr(object):
     # refresh apps dict
     self.apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
-    apps_dict = rospy.get_param("~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     apps_dict = nepi_apps.refreshAppsDict(self.apps_folder,apps_dict)
-    rospy.set_param("~apps_dict",apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
   def saveConfigCb(self, msg):  # Just update Class init values. Saving done by Config IF system
     pass # Left empty for sim, Should update from param server
 
   def setCurrentAsDefault(self):
-    rospy.set_param("~backup_enabled", True)
+    nepi_ros.set_param(self,"~backup_enabled", True)
     self.initParamServerValues(do_updates = False)
 
   def updateFromParamServer(self):
-    #rospy.logwarn("DRV_MGR: Debugging: param_dict = " + str(param_dict))
     #Run any functions that need updating on value change
     # Don't need to run any additional functionsinstallAppPkgCb
     pass
@@ -491,12 +485,12 @@ class NepiAppsMgr(object):
   def initParamServerValues(self,do_updates = True):
       self.selected_app = 'NONE'
       nepi_msg.publishMsgInfo(self,"Setting init values to param values")
-      self.init_backup_enabled = rospy.get_param("~backup_enabled", True)
+      self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
       self.apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
       self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
-      #nepi_msg.publishMsgInfo(self,str(rospy.get_param("~apps_dict")))
+      #nepi_msg.publishMsgInfo(self,str(nepi_ros.get_param(self,"~apps_dict")))
       try:
-        apps_dict = rospy.get_param("~apps_dict")
+        apps_dict = nepi_ros.get_param(self,"~apps_dict")
         apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
         nepi_msg.publishMsgInfo(self,"Got apps_dict values from param server")
       except:
@@ -506,14 +500,14 @@ class NepiAppsMgr(object):
         nepi_msg.publishMsgInfo(self,"Got apps_dict values from info data")
       nepi_msg.publishMsgWarn(self,"Apps Dict " + str(apps_dict))
       self.init_apps_dict = apps_dict
-      rospy.set_param("~apps_dict",apps_dict)
+      nepi_ros.set_param(self,"~apps_dict",apps_dict)
       self.printND()
       self.resetParamServer(do_updates)
       #self.printND()
 
   def resetParamServer(self,do_updates = True):
-      rospy.set_param("~backup_enabled",self.init_backup_enabled)
-      rospy.set_param("~apps_dict",self.init_apps_dict)
+      nepi_ros.set_param(self,"~backup_enabled",self.init_backup_enabled)
+      nepi_ros.set_param(self,"~apps_dict",self.init_apps_dict)
       if do_updates:
           self.updateFromParamServer()
           self.publish_status()

@@ -18,10 +18,14 @@ import rosparam
 
 import os
 import errno
+
 from nepi_edge_sdk_base import nepi_ros
+from nepi_edge_sdk_base import nepi_msg 
 
 from std_msgs.msg import String, Empty
 from nepi_ros_interfaces.srv import FileReset
+
+
 
 CFG_PATH = '/opt/nepi/ros/etc'
 CFG_SUFFIX = '.yaml'
@@ -49,144 +53,159 @@ SYS_CFGS_TO_PRESERVE = {
     'nepi_connect_bot_cfg.json' : '/opt/nepi/nepi_link/nepi-bot/cfg/bot/config.json' # NEPI Connect device (nepi-bot) config file
 }
 
-# Moving symlinks is typically faster and more robust than copying files, so to reduce the
-# chance of filesystem corruption in the event of e.g., power failure, we use a symlink-based config
-# file scheme.
-def symlink_force(target, link_name):
-    link_dirname = os.path.dirname(link_name)
-    if not os.path.exists(link_dirname):
-        rospy.logwarn("CFG_MGR: Skipping symlink for " + link_name + " because path does not exist... missing factory config?")
-        return False
-    try:
-        os.symlink(target, link_name)
-    except OSError as e:
-        if e.errno == errno.EEXIST:
-            os.remove(link_name)
-            os.symlink(target, link_name)
-        else:
-            rospy.logerr("Unable to create symlink %s for %s: (%s)", link_name, target, str(e))
+class config_mgr(object):
+    #######################
+    ### Node Initialization
+    DEFAULT_NODE_NAME = "config_mgr" # Can be overwitten by luanch command
+    def __init__(self):
+        #### APP NODE INIT SETUP ####
+        nepi_ros.init_node(name= self.DEFAULT_NODE_NAME)
+        self.node_name = nepi_ros.get_node_name()
+        self.base_namespace = nepi_ros.get_base_namespace()
+        nepi_msg.createMsgPublishers(self)
+        nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
+        ##############################
+
+        rospy.Subscriber('save_config', Empty, self.save_non_ros_cfgs) # Global one only
+        rospy.Subscriber('store_params', String, self.store_params)
+        rospy.Subscriber('full_user_restore', Empty, self.restore_user_cfgs)
+
+        rospy.Service('factory_reset', FileReset, self.factory_reset)
+        rospy.Service('user_reset', FileReset, self.user_reset)
+
+        #########################################################
+        ## Initiation Complete
+        nepi_msg.publishMsgInfo(self,"Initialization Complete")
+        # Spin forever (until object is detected)
+        nepi_ros.spin()
+        #########################################################
+
+
+    # Moving symlinks is typically faster and more robust than copying files, so to reduce the
+    # chance of filesystem corruption in the event of e.g., power failure, we use a symlink-based config
+    # file scheme.
+    def symlink_force(self,target, link_name):
+        link_dirname = os.path.dirname(link_name)
+        if not os.path.exists(link_dirname):
+            nepi_msg.publishMsgWarn(self,"Skipping symlink for " + link_name + " because path does not exist... missing factory config?")
             return False
-    return True
+        try:
+            os.symlink(target, link_name)
+        except OSError as e:
+            if e.errno == errno.EEXIST:
+                os.remove(link_name)
+                os.symlink(target, link_name)
+            else:
+                return False
+        return True
 
-def separate_node_name_in_msg(qualified_node_name):
-    return qualified_node_name.split("/")[-1]
+    def separate_node_name_in_msg(self,qualified_node_name):
+        return qualified_node_name.split("/")[-1]
 
-def update_from_file(file_pathname, namespace):
-    try:
-        paramlist = rosparam.load_file(file_pathname, namespace, verbose=True)
-        for params, ns in paramlist:
-            rosparam.upload_params(ns, params, verbose=True)
-    except:
-        rospy.logerr("Unable to load factory parameters from file %s", file_pathname)
-        return [False]
+    def update_from_file(self,file_pathname, namespace):
+        try:
+            paramlist = rosparam.load_file(file_pathname, namespace, verbose=True)
+            for params, ns in paramlist:
+                rosparam.upload_params(ns, params, verbose=True)
+        except:
+            nepi_msg.publishMsg(self,"Unable to load factory parameters from file " + file_pathname)
+            return [False]
 
-    return [True]
+        return [True]
 
-def get_cfg_pathname(qualified_node_name):
-    node_name = separate_node_name_in_msg(qualified_node_name)
-    subfolder_name = "/"
-    if nepi_ros.find_topic(qualified_node_name + "/idx").find("idx") != -1:
-    	subfolder_name = "/drivers/"
-    elif nepi_ros.find_topic(qualified_node_name + "/lsx").find("lsx") != -1:
-    	subfolder_name = "/drivers/"
-    elif nepi_ros.find_topic(qualified_node_name + "/ptx").find("ptx") != -1:
-    	subfolder_name = "/drivers/"
-    elif nepi_ros.find_topic(qualified_node_name + "/rbx").find("rbx") != -1:
-    	subfolder_name = "/drivers/"
-    elif nepi_ros.find_topic(qualified_node_name + "/npx").find("npx") != -1:
-    	subfolder_name = "/drivers/"
-    #rospy.loginfo(node_name)
-    cfg_pathname = CFG_PATH + subfolder_name + node_name  + '/' + node_name + CFG_SUFFIX
-    #rospy.loginfo(cfg_pathname)
-    return cfg_pathname
+    def get_cfg_pathname(self,qualified_node_name):
+        node_name = self.separate_node_name_in_msg(qualified_node_name)
+        subfolder_name = "/"
+        if nepi_ros.find_topic(qualified_node_name + "/idx").find("idx") != -1:
+            subfolder_name = "/drivers/"
+        elif nepi_ros.find_topic(qualified_node_name + "/lsx").find("lsx") != -1:
+            subfolder_name = "/drivers/"
+        elif nepi_ros.find_topic(qualified_node_name + "/ptx").find("ptx") != -1:
+            subfolder_name = "/drivers/"
+        elif nepi_ros.find_topic(qualified_node_name + "/rbx").find("rbx") != -1:
+            subfolder_name = "/drivers/"
+        elif nepi_ros.find_topic(qualified_node_name + "/npx").find("npx") != -1:
+            subfolder_name = "/drivers/"
+        #nepi_msg.publishMsgInfo(self,node_name)
+        cfg_pathname = CFG_PATH + subfolder_name + node_name  + '/' + node_name + CFG_SUFFIX
+        #nepi_msg.publishMsgInfo(self,cfg_pathname)
+        return cfg_pathname
 
-def get_user_cfg_pathname(qualified_node_name):
-    node_name = separate_node_name_in_msg(qualified_node_name)
-    user_cfg_dirname = os.path.join(USER_CFG_PATH, 'ros')
-    
-    # Ensure the path we report actually exists
-    if not os.path.isdir(user_cfg_dirname):
-        os.makedirs(user_cfg_dirname)
+    def get_user_cfg_pathname(self,qualified_node_name):
+        node_name = self.separate_node_name_in_msg(qualified_node_name)
+        user_cfg_dirname = os.path.join(USER_CFG_PATH, 'ros')
+        
+        # Ensure the path we report actually exists
+        if not os.path.isdir(user_cfg_dirname):
+            os.makedirs(user_cfg_dirname)
 
-    user_cfg_pathname = os.path.join(user_cfg_dirname, node_name + CFG_SUFFIX + USER_SUFFIX)
-    return user_cfg_pathname
+        user_cfg_pathname = os.path.join(user_cfg_dirname, node_name + CFG_SUFFIX + USER_SUFFIX)
+        return user_cfg_pathname
 
-def user_reset(req):
-    qualified_node_name = req.node_name
-    cfg_pathname = get_cfg_pathname(qualified_node_name)
+    def user_reset(self,req):
+        qualified_node_name = req.node_name
+        cfg_pathname = self.get_cfg_pathname(qualified_node_name)
 
-    # Now update the param server
-    return update_from_file(cfg_pathname, qualified_node_name)
+        # Now update the param server
+        return self.update_from_file(cfg_pathname, qualified_node_name)
 
-def factory_reset(req):
-    qualified_node_name = req.node_name
-    cfg_pathname = get_cfg_pathname(qualified_node_name)
-    factory_cfg_pathname = cfg_pathname + FACTORY_SUFFIX
+    def factory_reset(self,req):
+        qualified_node_name = req.node_name
+        cfg_pathname = self.get_cfg_pathname(qualified_node_name)
+        factory_cfg_pathname = cfg_pathname + FACTORY_SUFFIX
 
-    # First, move the symlink
-    if False == symlink_force(factory_cfg_pathname, cfg_pathname):
-        return [False] # Error logged upstream
+        # First, move the symlink
+        if False == self.symlink_force(factory_cfg_pathname, cfg_pathname):
+            return [False] # Error logged upstream
 
-    # Now update the param server
-    return update_from_file(cfg_pathname, qualified_node_name)
+        # Now update the param server
+        return self.update_from_file(cfg_pathname, qualified_node_name)
 
-def store_params(msg):
-    qualified_node_name = msg.data
-    user_cfg_pathname = get_user_cfg_pathname(qualified_node_name)
-    
-    # First, write to the user file
-    rosparam.dump_params(user_cfg_pathname, qualified_node_name)
+    def store_params(self,msg):
+        qualified_node_name = msg.data
+        user_cfg_pathname = self.get_user_cfg_pathname(qualified_node_name)
+        
+        # First, write to the user file
+        rosparam.dump_params(user_cfg_pathname, qualified_node_name)
 
-    # Now, ensure the link points to the correct file
-    cfg_pathname = get_cfg_pathname(qualified_node_name)
-    symlink_force(user_cfg_pathname, cfg_pathname) # Error logged upstream
+        # Now, ensure the link points to the correct file
+        cfg_pathname = self.get_cfg_pathname(qualified_node_name)
+        self.symlink_force(user_cfg_pathname, cfg_pathname) # Error logged upstream
 
-def save_non_ros_cfgs(msg):
-    target_dir = os.path.join(USER_CFG_PATH, 'sys')
-    if not os.path.exists(target_dir):
-        os.makedirs(target_dir)
+    def save_non_ros_cfgs(self,msg):
+        target_dir = os.path.join(USER_CFG_PATH, 'sys')
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
 
-    for cfg in SYS_CFGS_TO_PRESERVE:
-        source = SYS_CFGS_TO_PRESERVE[cfg]
-        target = os.path.join(USER_CFG_PATH, 'sys', cfg)
-        os.system('cp -rf ' + source + ' ' + target)
+        for cfg in SYS_CFGS_TO_PRESERVE:
+            source = SYS_CFGS_TO_PRESERVE[cfg]
+            target = os.path.join(USER_CFG_PATH, 'sys', cfg)
+            os.system('cp -rf ' + source + ' ' + target)
 
-def restore_user_cfgs(msg):
-    # First handle the NEPI-ROS user configs.
-    for root, dirs, files in os.walk(CFG_PATH):
-        for name in files:
-            full_name = os.path.join(root, name)
-            if full_name.endswith(CFG_SUFFIX) and os.path.islink(full_name):
-                user_cfg_name = os.path.join(USER_CFG_PATH, 'ros', name + USER_SUFFIX)
-                if os.path.exists(user_cfg_name): # Restrict to those with present user configs
-                    link_name = os.path.join(root, name.replace(FACTORY_SUFFIX, ''))
-                    rospy.loginfo("CFG_MGR: Updating " + link_name + " to user config")
-                    symlink_force(user_cfg_name, link_name)
+    def restore_user_cfgs(self,msg):
+        # First handle the NEPI-ROS user configs.
+        for root, dirs, files in os.walk(CFG_PATH):
+            for name in files:
+                full_name = os.path.join(root, name)
+                if full_name.endswith(CFG_SUFFIX) and os.path.islink(full_name):
+                    user_cfg_name = os.path.join(USER_CFG_PATH, 'ros', name + USER_SUFFIX)
+                    if os.path.exists(user_cfg_name): # Restrict to those with present user configs
+                        link_name = os.path.join(root, name.replace(FACTORY_SUFFIX, ''))
+                        nepi_msg.publishMsgInfo(self,"Updating " + link_name + " to user config")
+                        self.symlink_force(user_cfg_name, link_name)
 
-    # Now handle non-ROS user system configs.        
-    for name in SYS_CFGS_TO_PRESERVE:
-        full_name = os.path.join(USER_CFG_PATH, 'sys', name)
-        if os.path.exists(full_name):
-            if os.path.isdir(full_name):
-                full_name = os.path.join(full_name,'*') # Wildcard avoids copying source folder into target folder as a subdirectory
-            target = SYS_CFGS_TO_PRESERVE[name]
-            rospy.loginfo("CFG_MGR: Updating " + target + " from user config")
-            os.system('cp -rf ' + full_name + ' ' + target)
-            os.system('chown -R nepi:nepi ' + target)
+        # Now handle non-ROS user system configs.        
+        for name in SYS_CFGS_TO_PRESERVE:
+            full_name = os.path.join(USER_CFG_PATH, 'sys', name)
+            if os.path.exists(full_name):
+                if os.path.isdir(full_name):
+                    full_name = os.path.join(full_name,'*') # Wildcard avoids copying source folder into target folder as a subdirectory
+                target = SYS_CFGS_TO_PRESERVE[name]
+                nepi_msg.publishMsgInfo(self,"Updating " + target + " from user config")
+                os.system('cp -rf ' + full_name + ' ' + target)
+                os.system('chown -R nepi:nepi ' + target)
 
-def config_mgr():
-    rospy.init_node('config_mgr')
 
-    rospy.loginfo('Starting the config. mgr node')
-
-    rospy.Subscriber('save_config', Empty, save_non_ros_cfgs) # Global one only
-    rospy.Subscriber('store_params', String, store_params)
-    rospy.Subscriber('full_user_restore', Empty, restore_user_cfgs)
-
-    rospy.Service('factory_reset', FileReset, factory_reset)
-    rospy.Service('user_reset', FileReset, user_reset)
-
-    rospy.spin()
 
 if __name__ == '__main__':
     config_mgr()

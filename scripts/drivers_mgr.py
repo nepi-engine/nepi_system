@@ -147,7 +147,7 @@ class NepiDriversMgr(object):
     rospy.Service('~driver_status_query', DriverStatusQuery, self.driverStatusService)
 
     # Setup a driver folder timed check
-    rospy.Timer(rospy.Duration(1), self.checkAndUpdateCb, oneshot=True)
+    nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
     time.sleep(1)
     ## Publish Status
     self.publish_status()
@@ -156,9 +156,9 @@ class NepiDriversMgr(object):
     ## Initiation Complete
     nepi_msg.publishMsgInfo(self,"Initialization Complete")
     #Set up node shutdown
-    rospy.on_shutdown(self.cleanup_actions)
+    nepi_ros.on_shutdown(self.cleanup_actions)
     # Spin forever (until object is detected)
-    rospy.spin()
+    nepi_ros.spin()
     #########################################################
 
 
@@ -168,7 +168,7 @@ class NepiDriversMgr(object):
     return response
 
   def getDriverStatusServiceMsg(self,driver_name):
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     status_driver_msg = DriverStatusQueryResponse()
     status_driver_msg.name = driver_name
     if driver_name in drvs_dict.keys() and driver_name != 'NONE':
@@ -195,7 +195,7 @@ class NepiDriversMgr(object):
         
   # ln = sys._getframe().f_lineno ; 
   def printND(self):
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     nepi_msg.publishMsgInfo(self,'')
     nepi_msg.publishMsgInfo(self,'*******************')
     nepi_msg.publishMsgInfo(self,'Printing Drv Driver Dictionary')
@@ -213,13 +213,13 @@ class NepiDriversMgr(object):
   def publish_drivers_status(self):
     self.last_status_drivers_msg = self.status_drivers_msg
     self.status_drivers_msg = self.getDriversStatusMsg()
-    if not rospy.is_shutdown():
+    if not nepi_ros.is_shutdown():
       #nepi_msg.publishMsgWarn(self,"DriversStatus: " + str(self.status_drivers_msg))
       self.drivers_status_pub.publish(self.status_drivers_msg)
     self.save_cfg_if.saveConfig(do_param_updates = False) # Save config after initialization for drvt time
 
   def getDriversStatusMsg(self):
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     self.drivers_ordered_list = nepi_drv.getDriversOrderedList(drvs_dict)
     self.drivers_active_list = nepi_drv.getDriversActiveOrderedList(drvs_dict)
     status_drivers_msg = DriversStatus()
@@ -229,20 +229,20 @@ class NepiDriversMgr(object):
     status_drivers_msg.drivers_install_path = self.drivers_install_folder
     status_drivers_msg.drivers_install_list = self.drivers_install_files
     status_drivers_msg.driver_backup_path = self.drivers_install_folder
-    status_drivers_msg.backup_removed_drivers = rospy.get_param("~backup_enabled",self.init_backup_enabled)
+    status_drivers_msg.backup_removed_drivers = nepi_ros.get_param(self,"~backup_enabled",self.init_backup_enabled)
     status_drivers_msg.selected_driver = self.selected_driver
     return status_drivers_msg
 
   
   def publish_driver_status(self):
     self.status_driver_msg = self.getDriverStatusMsg()
-    if not rospy.is_shutdown():
+    if not nepi_ros.is_shutdown():
       #nepi_msg.publishMsgWarn(self,"DriverStatus: " + str(self.status_driver_msg))
       self.driver_status_pub.publish(self.status_driver_msg)
 
 
   def getDriverStatusMsg(self):
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     driver_name = self.selected_driver
     status_driver_msg = DriverStatus()
     status_driver_msg.name = driver_name
@@ -269,14 +269,14 @@ class NepiDriversMgr(object):
   def checkAndUpdateCb(self,_):
     ###############################
     ## First update Database
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
     self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
     need_update = self.drivers_files != drivers_files
     if need_update:
       nepi_msg.publishMsgInfo(self,"Need to Update Drv Database")
       none_dict = dict(NoneDict = "None")
-      drvs_dict = rospy.get_param("~drvs_dict",none_dict)
+      drvs_dict = nepi_ros.get_param(self,"~drvs_dict",none_dict)
       if 'NoneDict' not in drvs_dict.keys():
         drvs_dict = nepi_drv.updateDriversDict(self.drivers_folder,drvs_dict)
         nepi_msg.publishMsgInfo(self,"Got drvs_dict values from param server")
@@ -285,7 +285,7 @@ class NepiDriversMgr(object):
         drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
         drvs_dict = nepi_drv.activateAllDrivers(drvs_dict)
       #self.printND()
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.drivers_files = drivers_files
     self.drivers_ordered_list = nepi_drv.getDriversOrderedList(drvs_dict)
     self.drivers_active_list = nepi_drv.getDriversActiveOrderedList(drvs_dict)
@@ -325,7 +325,7 @@ class NepiDriversMgr(object):
             if discovery_node_name not in node_list:
               #Setup required param server drv_dict for discovery node
               dict_param_name = discovery_node_name + "/drv_dict"
-              rospy.set_param(dict_param_name,drv_dict)
+              nepi_ros.set_param(self,dict_param_name,drv_dict)
               #Try and launch node
               nepi_msg.publishMsgInfo(self,"")
               nepi_msg.publishMsgInfo(self,"Launching discovery process: " + discovery_node_name + " with drv_dict " + str(drv_dict))
@@ -398,7 +398,7 @@ class NepiDriversMgr(object):
     self.publish_status()
     # And now that we are finished, start a timer for the drvt runDiscovery()
     nepi_ros.sleep(self.DRIVER_UPDATE_CHECK_INTERVAL,100)
-    rospy.Timer(rospy.Duration(1), self.checkAndUpdateCb, oneshot=True)
+    nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
    
   
 
@@ -406,19 +406,19 @@ class NepiDriversMgr(object):
   ## Drivers Mgr Callbacks
   def enableAllCb(self,msg):
     drvs_dict = nepi_drv.activateAllDrivers(drvs_dict)
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
   def disableAllCb(self,msg):
     drvs_dict = nepi_drv.disableAllDrivers(drvs_dict)
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
 
   def selectDriverCb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     driver_name = msg.data
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     if driver_name in drvs_dict.keys() or driver_name == "NONE":
       self.selected_driver = driver_name
     self.publish_status()
@@ -427,7 +427,7 @@ class NepiDriversMgr(object):
     nepi_msg.publishMsgInfo(self,str(msg))
     driver_name = msg.name
     new_active_state = msg.active_state
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     if driver_name in drvs_dict.keys():
       driver = drvs_dict[driver_name]
       active_state = driver['active']
@@ -436,7 +436,7 @@ class NepiDriversMgr(object):
         drvs_dict = nepi_drv.activateDriver(driver_name,drvs_dict)
       else:
         drvs_dict = nepi_drv.disableDriver(driver_name,drvs_dict)
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
 
@@ -445,10 +445,10 @@ class NepiDriversMgr(object):
     driver_name = msg.name
     move_cmd = msg.move_cmd
     moveFunction = self.getOrderUpdateFunction(move_cmd)
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     if driver_name in drvs_dict.keys():
       drvs_dict = moveFunction(driver_name,drvs_dict)
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
 
@@ -472,65 +472,65 @@ class NepiDriversMgr(object):
     nepi_msg.publishMsgInfo(self,str(msg))
     driver_name = msg.name
     msg_data = msg.data
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     if driver_name in drvs_dict.keys():
       drvs_dict[driver_name]['msg'] = msg_data
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
   def updateOption1Cb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     driver_name = msg.name
     option = msg.option_str
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     if driver_name in drvs_dict.keys():
       driver = drvs_dict[driver_name]
       options = driver['DISCOVERY_DICT']['option_1_dict']['options']
       if option in options:
         drvs_dict[driver_name]['DISCOVERY_DICT']['option_1_dict']['set_val'] = option
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
   def updateOption2Cb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     driver_name = msg.name
     option = msg.option_str
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     if driver_name in drvs_dict.keys():
       driver = drvs_dict[driver_name]
       options = driver['DISCOVERY_DICT']['option_2_dict']['options']
       if option in options:
         drvs_dict[driver_name]['DISCOVERY_DICT']['option_2_dict']['set_val'] = option
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
   def installDriverPkgCb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     pkg_name = msg.data
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     if pkg_name in self.drivers_install_files:
      [success,drvs_dict]  = nepi_drv.installDriverPkg(pkg_name,drvs_dict,self.drivers_install_folder,self.drivers_folder)
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
   def removeDriverCb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     driver_name = msg.data
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     backup_folder = None
-    backup_enabled = rospy.get_param("~backup_enabled",self.init_backup_enabled)
+    backup_enabled = nepi_ros.get_param(self,"~backup_enabled",self.init_backup_enabled)
     if backup_enabled:
       backup_folder = self.drivers_install_folder
     if driver_name in drvs_dict:
       [success,drvs_dict] = nepi_drv.removeDriver(driver_name,drvs_dict,backup_folder)
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
 
   def enableBackupCb(self,msg):
     nepi_msg.publishMsgInfo(self,str(msg))
     backup_enabled = msg.data
-    rospy.set_param("~backup_enabled",backup_enabled)
+    nepi_ros.set_param(self,"~backup_enabled",backup_enabled)
     self.publish_status()
 
 
@@ -543,13 +543,13 @@ class NepiDriversMgr(object):
 
   def resetMgr(self):
     # reset drivers dict
-    rospy.set_param("~backup_enabled",True)
+    nepi_ros.set_param(self,"~backup_enabled",True)
     self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
     self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
     drvs_dict = nepi_drv.getDriversgetDriversDict(self.drivers_folder)
     drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
     drvs_dict = activateAllDrivers(drvs_dict)
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
 
@@ -560,16 +560,16 @@ class NepiDriversMgr(object):
     # refresh drivers dict
     self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
     self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
-    drvs_dict = rospy.get_param("~drvs_dict",self.init_drvs_dict)
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     drvs_dict = nepi_drv.refreshDriversDict(self.drivers_folder,drvs_dict)
-    rospy.set_param("~drvs_dict",drvs_dict)
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
   def saveConfigCb(self, msg):  # Just update Class init values. Saving done by Config IF system
     pass # Left empty for sim, Should update from param server
 
   def setCurrentAsDefault(self):
-    rospy.set_param("~backup_enabled", True)
+    nepi_ros.set_param(self,"~backup_enabled", True)
     self.initParamServerValues(do_updates = False)
 
   def updateFromParamServer(self):
@@ -581,12 +581,12 @@ class NepiDriversMgr(object):
   def initParamServerValues(self,do_updates = True):
       self.selected_driver = 'NONE'
       nepi_msg.publishMsgInfo(self,"Setting init values to param values")
-      self.init_backup_enabled = rospy.get_param("~backup_enabled", True)
+      self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
       self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
       self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
-      #nepi_msg.publishMsgInfo(self,str(rospy.get_param("~drvs_dict")))
+      #nepi_msg.publishMsgInfo(self,str(nepi_ros.get_param(self,"~drvs_dict")))
       none_dict = dict(NoneDict = "None")
-      drvs_dict = rospy.get_param("~drvs_dict",none_dict)
+      drvs_dict = nepi_ros.get_param(self,"~drvs_dict",none_dict)
       if 'NoneDict' not in drvs_dict.keys():
         drvs_dict = nepi_drv.updateDriversDict(self.drivers_folder,drvs_dict)
         nepi_msg.publishMsgInfo(self,"Got drvs_dict values from param server")
@@ -596,14 +596,14 @@ class NepiDriversMgr(object):
         drvs_dict = nepi_drv.activateAllDrivers(drvs_dict)
         nepi_msg.publishMsgInfo(self,"Got drvs_dict values from reading in file data")
       self.init_drvs_dict = drvs_dict
-      rospy.set_param("~drvs_dict",drvs_dict)
+      nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
       #self.printND()
       self.resetParamServer(do_updates)
       #self.printND()
 
   def resetParamServer(self,do_updates = True):
-      rospy.set_param("~backup_enabled",self.init_backup_enabled)
-      rospy.set_param("~drvs_dict",self.init_drvs_dict)
+      nepi_ros.set_param(self,"~backup_enabled",self.init_backup_enabled)
+      nepi_ros.set_param(self,"~drvs_dict",self.init_drvs_dict)
       if do_updates:
           self.updateFromParamServer()
           self.publish_status()

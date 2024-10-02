@@ -17,6 +17,10 @@ import subprocess
 
 import rospy
 
+
+from nepi_edge_sdk_base import nepi_ros
+from nepi_edge_sdk_base import nepi_msg 
+
 from std_msgs.msg import String, Empty, Float32
 from nepi_ros_interfaces.msg import SystemStatus, SystemDefs, WarningFlags, StampedString, SaveData
 from nepi_ros_interfaces.srv import SystemDefsQuery, SystemDefsQueryResponse, OpEnvironmentQuery, OpEnvironmentQueryResponse, \
@@ -29,8 +33,6 @@ BYTES_PER_MEGABYTE = 2**20
 
 
 class SystemMgrNode():
-    NODE_NAME = "system_mgr"
-
     STATUS_PERIOD = 1.0  # TODO: Configurable update period?
 
     DISK_FULL_MARGIN_MB = 250  # MB TODO: Configurable?
@@ -83,9 +85,97 @@ class SystemMgrNode():
     installing_new_image = False
     archiving_inactive_image = False
 
+    #######################
+    ### Node Initialization
+    DEFAULT_NODE_NAME = "system_mgr" # Can be overwitten by luanch command
+    def __init__(self):
+        #### APP NODE INIT SETUP ####
+        nepi_ros.init_node(name= self.DEFAULT_NODE_NAME)
+        self.node_name = nepi_ros.get_node_name()
+        self.base_namespace = nepi_ros.get_base_namespace()
+        nepi_msg.createMsgPublishers(self)
+        nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
+        ##############################
+
+        status_period = nepi_ros.duration(1)  # TODO: Configurable rate?
+
+        # Announce published topics
+        self.status_pub = rospy.Publisher(
+            'system_status', SystemStatus, queue_size=1)
+        self.store_params_pub = rospy.Publisher(
+            'store_params', String, queue_size=10)
+        self.throttle_ratio_pub = rospy.Publisher(
+            'apply_throttle', Float32, queue_size=3)
+        self.set_op_env_pub = rospy.Publisher(
+            'set_op_environment', String, queue_size=3)
+        # For auto-stop of save data; disk full protection
+        self.save_data_pub = rospy.Publisher(
+            'save_data', SaveData, queue_size=1)
+
+        self.current_throttle_ratio = 1.0
+
+        # Subscribe to topics
+        rospy.Subscriber('save_data', SaveData, self.set_save_status)
+        rospy.Subscriber('clear_data_folder', Empty, self.clear_data_folder)
+        rospy.Subscriber('set_op_environment', String, self.set_op_environment)
+
+        rospy.Subscriber('set_device_id', String,
+                         self.set_device_id)  # Public ns
+
+        rospy.Subscriber('submit_system_error_msg', String,
+                         self.handle_system_error_msg)
+
+        rospy.Subscriber('install_new_image', String,
+                         self.handle_install_new_img, queue_size=1)
+
+        rospy.Subscriber('switch_active_inactive_rootfs', Empty,
+                         self.handle_switch_active_inactive_rootfs)
+
+        rospy.Subscriber('archive_inactive_rootfs', Empty, self.handle_archive_inactive_rootfs, queue_size=1)
+
+        rospy.Subscriber('save_data_prefix', String, self.save_data_prefix_callback)
+
+        # Advertise services
+        rospy.Service('system_defs_query', SystemDefsQuery,
+                      self.provide_system_defs)
+        rospy.Service('op_environment_query', OpEnvironmentQuery,
+                      self.provide_op_environment)
+        rospy.Service('sw_update_status_query', SystemSoftwareStatusQuery,
+                       self.provide_sw_update_status)
+
+        self.save_cfg_if = SaveCfgIF(
+            updateParamsCallback=None, paramsModifiedCallback=self.updateFromParamServer)
+
+        # Need to get the storage_mountpoint and first-stage rootfs early because they are used in init_msgs()
+        self.storage_mountpoint = nepi_ros.get_param(self,
+            "~storage_mountpoint", self.storage_mountpoint)
+        self.first_stage_rootfs_device = nepi_ros.get_param(self,
+            "~first_stage_rootfs_device", self.first_stage_rootfs_device)
+        
+        # Need to identify the rootfs scheme because it is used in init_msgs()
+        self.rootfs_ab_scheme = sw_update_utils.identifyRootfsABScheme()
+
+        self.init_msgs()
+
+        # Ensure that the user partition is properly laid out
+        self.storage_subdirs = {} # Populated in function below
+        if self.ensure_reqd_storage_subdirs() is True:
+            # Now can advertise the system folder query
+            rospy.Service('system_storage_folder_query', SystemStorageFolderQuery,
+                self.provide_system_data_folder)
+
+        self.valid_device_id_re = re.compile(r"^[a-zA-Z][\w]*$")
+
+        #########################################################
+        ## Initiation Complete
+        nepi_msg.publishMsgInfo(self,"Initialization Complete")
+        self.run()
+
+
+
     def add_info_string(self, string, level):
         self.status_msg.info_strings.append(StampedString(
-            timestamp=rospy.get_rostime(), payload=string, priority=level))
+            timestamp=nepi_ros.get_rostime(), payload=string, priority=level))
 
     def get_device_sn(self):
         with open(self.SYS_ENV_PATH, "r") as f:
@@ -126,7 +216,7 @@ class SystemMgrNode():
                 self.add_info_string(
                     WarningFlags.CRITICAL_TEMPERATURE_STRING, StampedString.PRI_HIGH)
                 # Set the throttle ratio to 0% globally
-                rospy.logerr_throttle(
+                nepi_msg.printMsgInfoThrottle(
                     10, "%s: temperature = %f", WarningFlags.CRITICAL_TEMPERATURE_STRING, t)
                 throttle_ratio_min = 0.0
             else:
@@ -135,7 +225,7 @@ class SystemMgrNode():
                     self.status_msg.warnings.flags[WarningFlags.HIGH_TEMPERATURE] = True
                     throttle_ratio_i = 1.0 - ((t - self.system_defs_msg.warning_temps[i]) / (
                         self.system_defs_msg.critical_temps[i] - self.system_defs_msg.warning_temps[i]))
-                    #rospy.logwarn_throttle( 10, "%s: temperature = %f", WarningFlags.HIGH_TEMPERATURE_STRING, t)
+                    #nepi_msg.printMsgInfoThrottle( 10, "%s: temperature = %f", WarningFlags.HIGH_TEMPERATURE_STRING, t)
                     throttle_ratio_min = min(
                         throttle_ratio_i, throttle_ratio_min)
                 else:
@@ -324,7 +414,7 @@ class SystemMgrNode():
         if (msg.data != OpEnvironmentQueryResponse.OP_ENV_AIR) and (msg.data != OpEnvironmentQueryResponse.OP_ENV_WATER):
             rospy.logwarn(
                 "Setting environment parameter to a non-standard value: %s", msg.data)
-        rospy.set_param("~op_environment", msg.data)
+        nepi_ros.set_param(self,"~op_environment", msg.data)
 
     def set_device_id(self, msg):
         # First, validate the characters in the msg as namespace chars -- blank string is okay here to clear the value
@@ -456,7 +546,7 @@ class SystemMgrNode():
 
     def provide_op_environment(self, req):
         # Just proxy the param server
-        return OpEnvironmentQueryResponse(rospy.get_param("~op_environment", OpEnvironmentQueryResponse.OP_ENV_AIR))
+        return OpEnvironmentQueryResponse(nepi_ros.get_param(self,"~op_environment", OpEnvironmentQueryResponse.OP_ENV_AIR))
     
     def save_data_prefix_callback(self, msg):
         save_data_prefix = msg.data
@@ -567,55 +657,55 @@ class SystemMgrNode():
             
         # If we get here, failed to get the storage device from /etc/fstab
         rospy.logwarn('Failed to get NEPI storage device from /etc/fstab -- falling back to system_mgr config file')
-        if not rospy.has_param("~nepi_storage_device"):
+        if not nepi_ros.has_param(self,"~nepi_storage_device"):
             rospy.logerr("Parameter nepi_storage_device not available -- falling back to hard-coded " + self.nepi_storage_device)
         else:
-            self.nepi_storage_device = rospy.get_param(
+            self.nepi_storage_device = nepi_ros.get_param(self,
                 "~nepi_storage_device", self.nepi_storage_device)
             rospy.loginfo("Identified NEPI storage device " + self.nepi_storage_device + ' from config file')
     
     def updateFromParamServer(self):
-        op_env = rospy.get_param(
+        op_env = nepi_ros.get_param(self,
             "~op_environment", OpEnvironmentQueryResponse.OP_ENV_AIR)
         # Publish it to all subscribers (which includes this node) to ensure the parameter is applied
         self.set_op_env_pub.publish(String(op_env))
 
         # Now gather all the params and set members appropriately
-        self.storage_mountpoint = rospy.get_param(
+        self.storage_mountpoint = nepi_ros.get_param(self,
             "~storage_mountpoint", self.storage_mountpoint)
         
-        self.auto_switch_rootfs_on_new_img_install = rospy.get_param(
+        self.auto_switch_rootfs_on_new_img_install = nepi_ros.get_param(self,
             "~auto_switch_rootfs_on_new_img_install", self.auto_switch_rootfs_on_new_img_install
         )
 
-        self.first_stage_rootfs_device = rospy.get_param(
+        self.first_stage_rootfs_device = nepi_ros.get_param(self,
             "~first_stage_rootfs_device", self.first_stage_rootfs_device
         )
 
         # nepi_storage_device has some additional logic
         self.getNEPIStorageDevice()
         
-        self.new_img_staging_device = rospy.get_param(
+        self.new_img_staging_device = nepi_ros.get_param(self,
             "~new_img_staging_device", self.new_img_staging_device
         )
 
-        self.new_img_staging_device_removable = rospy.get_param(
+        self.new_img_staging_device_removable = nepi_ros.get_param(self,
             "~new_img_staging_device_removable", self.new_img_staging_device_removable
         )
 
-        self.emmc_device = rospy.get_param(
+        self.emmc_device = nepi_ros.get_param(self,
             "~emmc_device", self.emmc_device
         )
 
-        self.usb_device = rospy.get_param(
+        self.usb_device = nepi_ros.get_param(self,
             "~usb_device", self.usb_device
         )
 
-        self.sd_card_device = rospy.get_param(
+        self.sd_card_device = nepi_ros.get_param(self,
             "~sd_card_device", self.sd_card_device
         )
 
-        self.ssd_device = rospy.get_param(
+        self.ssd_device = nepi_ros.get_param(self,
             "~ssd_device", self.ssd_device
         )
     
@@ -634,7 +724,7 @@ class SystemMgrNode():
             if status is False:
                 rospy.logerr("Failed to reset boot fail counter: " + err_msg)
 
-        rospy.Timer(rospy.Duration(self.STATUS_PERIOD),
+        rospy.Timer(nepi_ros.duration(self.STATUS_PERIOD),
                     self.publish_periodic_status)
 
         # Call the method to update s/w status once internally to prime the status fields now that we have all the parameters
@@ -643,80 +733,6 @@ class SystemMgrNode():
         
         rospy.spin()
 
-    def __init__(self):
-        rospy.loginfo("Starting " + self.NODE_NAME + "node")
-        rospy.init_node(self.NODE_NAME)
-
-        status_period = rospy.Duration(1)  # TODO: Configurable rate?
-
-        # Announce published topics
-        self.status_pub = rospy.Publisher(
-            'system_status', SystemStatus, queue_size=1)
-        self.store_params_pub = rospy.Publisher(
-            'store_params', String, queue_size=10)
-        self.throttle_ratio_pub = rospy.Publisher(
-            'apply_throttle', Float32, queue_size=3)
-        self.set_op_env_pub = rospy.Publisher(
-            'set_op_environment', String, queue_size=3)
-        # For auto-stop of save data; disk full protection
-        self.save_data_pub = rospy.Publisher(
-            'save_data', SaveData, queue_size=1)
-
-        self.current_throttle_ratio = 1.0
-
-        # Subscribe to topics
-        rospy.Subscriber('save_data', SaveData, self.set_save_status)
-        rospy.Subscriber('clear_data_folder', Empty, self.clear_data_folder)
-        rospy.Subscriber('set_op_environment', String, self.set_op_environment)
-
-        rospy.Subscriber('set_device_id', String,
-                         self.set_device_id)  # Public ns
-
-        rospy.Subscriber('submit_system_error_msg', String,
-                         self.handle_system_error_msg)
-
-        rospy.Subscriber('install_new_image', String,
-                         self.handle_install_new_img, queue_size=1)
-
-        rospy.Subscriber('switch_active_inactive_rootfs', Empty,
-                         self.handle_switch_active_inactive_rootfs)
-
-        rospy.Subscriber('archive_inactive_rootfs', Empty, self.handle_archive_inactive_rootfs, queue_size=1)
-
-        rospy.Subscriber('save_data_prefix', String, self.save_data_prefix_callback)
-
-        # Advertise services
-        rospy.Service('system_defs_query', SystemDefsQuery,
-                      self.provide_system_defs)
-        rospy.Service('op_environment_query', OpEnvironmentQuery,
-                      self.provide_op_environment)
-        rospy.Service('sw_update_status_query', SystemSoftwareStatusQuery,
-                       self.provide_sw_update_status)
-
-        self.save_cfg_if = SaveCfgIF(
-            updateParamsCallback=None, paramsModifiedCallback=self.updateFromParamServer)
-
-        # Need to get the storage_mountpoint and first-stage rootfs early because they are used in init_msgs()
-        self.storage_mountpoint = rospy.get_param(
-            "~storage_mountpoint", self.storage_mountpoint)
-        self.first_stage_rootfs_device = rospy.get_param(
-            "~first_stage_rootfs_device", self.first_stage_rootfs_device)
-        
-        # Need to identify the rootfs scheme because it is used in init_msgs()
-        self.rootfs_ab_scheme = sw_update_utils.identifyRootfsABScheme()
-
-        self.init_msgs()
-
-        # Ensure that the user partition is properly laid out
-        self.storage_subdirs = {} # Populated in function below
-        if self.ensure_reqd_storage_subdirs() is True:
-            # Now can advertise the system folder query
-            rospy.Service('system_storage_folder_query', SystemStorageFolderQuery,
-                self.provide_system_data_folder)
-
-        self.valid_device_id_re = re.compile(r"^[a-zA-Z][\w]*$")
-
-        self.run()
 
 
 if __name__ == '__main__':
