@@ -91,6 +91,7 @@ class AIDetectorManager:
             else:
                 try:
                     class_instance = ai_class(ai_dict,self.node_namespace)
+                    time.sleep(1) # Give some time for publishers to set in class init
                 except Exception as e:
                     nepi_msg.publishMsgWarn(self,"Failed to instantiate ai framework class " + class_name + " " + str(e))
                     break
