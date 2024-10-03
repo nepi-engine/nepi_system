@@ -405,11 +405,13 @@ class NepiDriversMgr(object):
   ###################
   ## Drivers Mgr Callbacks
   def enableAllCb(self,msg):
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     drvs_dict = nepi_drv.activateAllDrivers(drvs_dict)
     nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
   def disableAllCb(self,msg):
+    drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     drvs_dict = nepi_drv.disableAllDrivers(drvs_dict)
     nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()

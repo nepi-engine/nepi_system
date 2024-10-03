@@ -316,7 +316,7 @@ class NepiAppsMgr(object):
           try:
             nepi_ros.load_params_from_file(config_file_path, params_namespace)
           except Exception as e:
-            nepi_msg.publishMsgInfo(self,"Failed to import app params from config: " + app_node_name + " " + str(e))
+            nepi_msg.publishMsgInfo(self,"No config file found for app: " + app_node_name + " starting with factory settings")
           #Try and launch node
           nepi_msg.publishMsgInfo(self,"")
           nepi_msg.publishMsgInfo(self,"Launching application node: " + app_node_name)
@@ -344,12 +344,14 @@ class NepiAppsMgr(object):
   ## Apps Mgr Callbacks
 
   def enableAllCb(self,msg):
-    apps_dict = nepi_drv.activateAllApps(apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_apps.activateAllApps(apps_dict)
     nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
   def disableAllCb(self,msg):
-    apps_dict = nepi_drv.disableAllApps(apps_dict)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_apps.disableAllApps(apps_dict)
     nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
@@ -498,10 +500,9 @@ class NepiAppsMgr(object):
         apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
         apps_dict = nepi_apps.activateAllApps(apps_dict)
         nepi_msg.publishMsgInfo(self,"Got apps_dict values from info data")
-      nepi_msg.publishMsgWarn(self,"Apps Dict " + str(apps_dict))
+      #self.printND()
       self.init_apps_dict = apps_dict
       nepi_ros.set_param(self,"~apps_dict",apps_dict)
-      self.printND()
       self.resetParamServer(do_updates)
       #self.printND()
 

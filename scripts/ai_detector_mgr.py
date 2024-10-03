@@ -42,6 +42,7 @@ class AIDetectorManager:
 
 
     classifier_dict = dict()
+    class_dict = dict()
 
     current_classifier = "None"
     current_classifier_classes = []
@@ -66,10 +67,13 @@ class AIDetectorManager:
         #### APP NODE INIT SETUP ####
         nepi_ros.init_node(name= self.DEFAULT_NODE_NAME)
         self.node_name = nepi_ros.get_node_name()
+        self.node_namespace = nepi_ros.get_node_namespace()
         self.base_namespace = nepi_ros.get_base_namespace()
         nepi_msg.createMsgPublishers(self)
         nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
         ##############################
+        self.classifier_dict = dict()
+        self.class_dict = dict()
         self.classifier_load_start_time = nepi_ros.time_now()
         # Find AI Frameworks
         ais_dict = nepi_ais.getAIsDict(self.AI_IF_SEARCH_PATH)
@@ -86,7 +90,7 @@ class AIDetectorManager:
                 break
             else:
                 try:
-                    class_instance = ai_class(ai_dict)
+                    class_instance = ai_class(ai_dict,self.node_namespace)
                 except Exception as e:
                     nepi_msg.publishMsgWarn(self,"Failed to instantiate ai framework class " + class_name + " " + str(e))
                     break
@@ -95,16 +99,17 @@ class AIDetectorManager:
                     for model_name in models_dict.keys():
                         model_dict = models_dict[model_name]
                         model_dict['type'] = ai_name
-                        model_dict['class'] = class_instance
                         model_dict['active'] = True
                         self.classifier_dict[model_name] = model_dict
+                        self.class_dict[model_name] = class_instance
                 except Exception as e:
                     nepi_msg.publishMsgWarn(self,"Failed to get models from class " + class_name)
                     break
                 
                 if (len(model_dict.keys()) < 1):
                     nepi_msg.publishMsgWarn(self,"No classiers identified for this system at " + file_path)
-        rospy.set_param('~classifier_dict', self.classifier_dict)
+        #nepi_msg.publishMsgWarn(self,"Storing classifier dict in param server: " + str(self.classifier_dict))
+        nepi_ros.set_param(self,'~classifier_dict', self.classifier_dict)
 
         # Setup Node Services
         rospy.Service('~img_classifier_list_query', ImageClassifierListQuery, self.provideClassifierList)
@@ -147,9 +152,10 @@ class AIDetectorManager:
             return
             
         # Validate the requested_detection threshold
-        if (threshold < self.MIN_THRESHOLD or threshold > self.MAX_THRESHOLD):
-            nepi_msg.publishMsgErr(self,"Requested detection threshold (" + str(threshold) + ") out of range (0.001 - 1.0)")
-            return
+        if (threshold < self.MIN_THRESHOLD):
+            threshold = self.MIN_THRESHOLD
+        elif (threshold > self.MAX_THRESHOLD):
+            threshold = self.MAX_THRESHOLD
 
         # Check that the requested classifier exists
         if not (classifier_name in self.classifier_dict.keys()):
@@ -167,13 +173,23 @@ class AIDetectorManager:
  
         # Start the classifier
         classifier = self.classifier_dict[classifier_name]['name']
-        classifier_class = self.classifier_dict[classifier_name]['class']
+        classifier_class = self.class_dict[classifier_name]
         self.classifier_class = classifier_class
         self.classifier_load_start_time = nepi_ros.time_now()
         self.classifier_class.startClassifier(classifier=classifier, input_img=self.current_img_topic, threshold=self.current_threshold)
         if self.found_object_sub is not None:
             self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
-            
+        self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING        
+        self.update_state_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.stateUpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
+
+
+
+    def stateUpdateCb(self, msg):
+        # Means that darknet is up and running
+        self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING
+        if not (None == self.update_state_sub):
+            self.update_state_sub.unregister()
+
 
     def stopClassifierCb(self, msg):
         self.stopClassifier()
@@ -181,16 +197,22 @@ class AIDetectorManager:
     def stopClassifier(self):
         if self.classifier_class != None:
             self.classifier_class.stopClassifier()
+            if not (None == self.update_state_sub):
+                self.update_state_sub.unregister()
             self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
             self.current_threshold = None
 
     def setThresholdCb(self, msg):
         # All we do here is update the current_threshold so that it is up-to-date in status responses
         # and will be saved properly in the config file (on request).
-        if (msg.data >= self.MIN_THRESHOLD and msg.data <= self.MAX_THRESHOLD):
-            self.current_threshold = msg.data
-            if self.classifier_class != None:
-                self.classifier_class.updateClassifierThreshold(self.current_threshold)  # Send to classifier process
+        threshold = msg.data
+        if (threshold < self.MIN_THRESHOLD):
+            threshold = self.MIN_THRESHOLD
+        elif (threshold > self.MAX_THRESHOLD):
+            threshold = self.MAX_THRESHOLD
+        self.current_threshold = msg.data
+        if self.classifier_class != None:
+            self.classifier_class.updateClassifierThreshold(self.current_threshold)  # Send to classifier process
 
 
     def provideClassifierList(self, req):
@@ -200,7 +222,6 @@ class AIDetectorManager:
         # Update the loading progress if necessary
         loading_progress = 0.0
         if self.classifier_class is not None:
-            self.classifier_state = self.classifier_class.getClassifierState()
             if self.current_classifier in self.classifier_dict.keys():
                 if (self.classifier_state == ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING):
                     loading_progress = 1.0
@@ -208,14 +229,16 @@ class AIDetectorManager:
                     loading_elapsed_s = (nepi_ros.time_now() - self.classifier_load_start_time).to_sec()
                     estimated_load_time_s = self.FIXED_LOADING_START_UP_TIME_S + (self.classifier_dict[self.current_classifier]['size'] / self.ESTIMATED_WEIGHT_LOAD_RATE_BYTES_PER_SECOND)
                     if loading_elapsed_s > estimated_load_time_s:
-                        loading_progress = 1.0
-                        self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING
+                        loading_progress = .95
                     else:
                         loading_progress = loading_elapsed_s / estimated_load_time_s
         return [self.current_img_topic, self.current_classifier, str(self.current_classifier_classes), \
                 self.classifier_state, loading_progress, self.current_threshold, \
                 self.has_depth_map,self.current_depth_map_topic,self.has_pointcloud,self.current_pointcloud_topic]
-                               
+
+
+
+
                 
     def setCurrentSettingsAsDefault(self):
         nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
