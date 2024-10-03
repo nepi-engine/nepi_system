@@ -173,8 +173,8 @@ class NepiDriversMgr(object):
     status_driver_msg.name = driver_name
     if driver_name in drvs_dict.keys() and driver_name != 'NONE':
       drv_dict = drvs_dict[driver_name]
-      status_driver_msg.group = drv_dict['group']
-      status_driver_msg.group_id  = drv_dict['group_id']
+      status_driver_msg.group = drv_dict['NODE_DICT']['group']
+      status_driver_msg.group_id  = drv_dict['NODE_DICT']['group_id']
       status_driver_msg.interfaces  = drv_dict['DISCOVERY_DICT']['interfaces']
       status_driver_msg.options_1_name  = drv_dict['DISCOVERY_DICT']['option_1_dict']['name']
       status_driver_msg.options_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['options']
@@ -186,7 +186,7 @@ class NepiDriversMgr(object):
       status_driver_msg.other_users_list  = drv_dict['users']
       status_driver_msg.active_state  = drv_dict['active']
       status_driver_msg.order  = drv_dict['order']
-      status_driver_msg.description = drv_dict['description']
+      status_driver_msg.description = drv_dict['NODE_DICT']['description']
       status_driver_msg.msg_str = drv_dict['msg']
     return status_driver_msg
 
@@ -248,8 +248,8 @@ class NepiDriversMgr(object):
     status_driver_msg.name = driver_name
     if driver_name in drvs_dict.keys() and driver_name != 'NONE':
       drv_dict = drvs_dict[driver_name]
-      status_driver_msg.group = drv_dict['group']
-      status_driver_msg.group_id  = drv_dict['group_id']
+      status_driver_msg.group = drv_dict['NODE_DICT']['group']
+      status_driver_msg.group_id  = drv_dict['NODE_DICT']['group_id']
       status_driver_msg.interfaces  = drv_dict['DISCOVERY_DICT']['interfaces']
       status_driver_msg.options_1_name  = drv_dict['DISCOVERY_DICT']['option_1_dict']['name']
       status_driver_msg.options_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['options']
@@ -261,7 +261,7 @@ class NepiDriversMgr(object):
       status_driver_msg.other_users_list  = drv_dict['users']
       status_driver_msg.active_state  = drv_dict['active']
       status_driver_msg.order  = drv_dict['order']
-      status_driver_msg.description = drv_dict['description']
+      status_driver_msg.description = drv_dict['NODE_DICT']['description']
       status_driver_msg.msg_str = drv_dict['msg']
     return status_driver_msg
 
