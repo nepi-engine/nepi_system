@@ -13,8 +13,9 @@ import numpy as np
 import cv2
 
 from nepi_edge_sdk_base import nepi_ros
+from nepi_edge_sdk_base import nepi_ais
 from nepi_edge_sdk_base import nepi_msg 
-from nepi_edge_sdk_base import nepi_pc
+
 
 from std_msgs.msg import Empty, Float32
 from rospy.numpy_msg import numpy_msg
@@ -29,17 +30,17 @@ from nepi_edge_sdk_base.save_cfg_if import SaveCfgIF
 
 
 class AIDetectorManager:
-
+    AI_IF_SEARCH_PATH = '/opt/nepi/ros/share/nepi_ai_ifs'
+    AI_MODEL_LIB_PATH = '/mnt/nepi_storage/ai_models/'
     # AI Detection Setttings
     NODE_NAME = "ai_detector_mgr"
-    DARKNET_CFG_PATH = '/mnt/nepi_storage/ai_models/darknet_ros/'
+    
     MIN_THRESHOLD = 0.001
     MAX_THRESHOLD = 1.0
     FIXED_LOADING_START_UP_TIME_S = 5.0 # Total guess
     ESTIMATED_WEIGHT_LOAD_RATE_BYTES_PER_SECOND = 16000000.0 # Very roughly empirical based on YOLOv3
 
 
-    darknet_cfg_files = []
     classifier_dict = dict()
 
     current_classifier = "None"
@@ -54,11 +55,9 @@ class AIDetectorManager:
     classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
     classifier_load_start_time = None
 
-    darknet_ros_process = None
-    darknet_update_sub= None
-    darknet_found_object_sub = None
-    darknet_bounding_boxes_sub = None
-
+    found_object_sub = None
+   
+    classifier_class = None
 
     #######################
     ### Node Initialization
@@ -71,16 +70,40 @@ class AIDetectorManager:
         nepi_msg.createMsgPublishers(self)
         nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
         ##############################
-        # Find Darknet Classifier Models
-        [darknet_classifiers,darknet_model_sizes,darknet_model_classes] = self.darknetFindClassifiers()
-
-        for i in range(len(darknet_classifiers)):
-            entry = {'type': 'Darknet', 'size': darknet_model_sizes[i], 'classes': str(darknet_model_classes[i])}
-            self.classifier_dict[darknet_classifiers[i]] = entry
-        
-        if (len(self.classifier_dict.keys()) < 1):
-            nepi_msg.publishMsgWarn(self,"No classiers identified for this system at " + darknet_cfg_path_config_folder)
-
+        # Find AI Frameworks
+        ais_dict = nepi_ais.getAIsDict(self.AI_IF_SEARCH_PATH)
+        nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
+        for ai_name in ais_dict.keys():
+            ai_dict = ais_dict[ai_name]
+            file_name = ai_dict['if_file']
+            file_path = ai_dict['if_path']
+            module_name = ai_dict['module_name']
+            class_name = ai_dict['class_name']
+            [success, msg, ai_class] = nepi_ais.importAIClass(file_name,file_path,module_name,class_name)
+            if success == False:
+                nepi_msg.publishMsgWarn(self,"Failed to import ai framework if file " + file_name)
+                break
+            else:
+                try:
+                    class_instance = ai_class(ai_dict)
+                except Exception as e:
+                    nepi_msg.publishMsgWarn(self,"Failed to instantiate ai framework class " + class_name + " " + str(e))
+                    break
+                try:
+                    models_dict = class_instance.getModelsDict()
+                    for model_name in models_dict.keys():
+                        model_dict = models_dict[model_name]
+                        model_dict['type'] = ai_name
+                        model_dict['class'] = class_instance
+                        model_dict['active'] = True
+                        self.classifier_dict[model_name] = model_dict
+                except Exception as e:
+                    nepi_msg.publishMsgWarn(self,"Failed to get models from class " + class_name)
+                    break
+                
+                if (len(model_dict.keys()) < 1):
+                    nepi_msg.publishMsgWarn(self,"No classiers identified for this system at " + file_path)
+        rospy.set_param('~classifier_dict', self.classifier_dict)
 
         # Setup Node Services
         rospy.Service('~img_classifier_list_query', ImageClassifierListQuery, self.provideClassifierList)
@@ -122,17 +145,6 @@ class AIDetectorManager:
             nepi_msg.publishMsgErr(self,"Topic " + input_img + " is not a valid image topic -- not starting classifier")
             return
             
-        # Check if image source has depth_map and pointcloud topics
-        depth_map_topic = input_img.rsplit("/")[0] + "/depth_map"
-        depth_map_topic = nepi_ros.find_topic(depth_map_topic)
-        if depth_map_topic == "":
-          depth_map_topic = "None"
-          
-        pointcloud_topic = input_img.rsplit("/")[0] + "/pointcloud"
-        pointcloud_topic = nepi_ros.find_topic(pointcloud_topic)
-        if pointcloud_topic == "":
-          pointcloud_topic = "None"
-
         # Validate the requested_detection threshold
         if (threshold < self.MIN_THRESHOLD or threshold > self.MAX_THRESHOLD):
             nepi_msg.publishMsgErr(self,"Requested detection threshold (" + str(threshold) + ") out of range (0.001 - 1.0)")
@@ -153,29 +165,29 @@ class AIDetectorManager:
         self.current_threshold = threshold
  
         # Start the classifier
-        model_type = self.classifier_dict[classifier]['type']
-        if model_type == "Darknet":
-            self.current_model_type = model_type
-            self.darknetStartClassifier(classifier=self.current_classifier, input_img=self.current_img_topic, threshold=self.current_threshold, \
-            				input_depth_map = depth_map_topic, input_pointcloud = pointcloud_topic)
+        classifier_class = self.classifier_dict[classifier]['class']
+        self.classifier_class = classifier_class
+        self.classifier_class.startClassifier(classifier=self.current_classifier, input_img=self.current_img_topic, threshold=self.current_threshold)
+        if self.found_object_sub is not None:
+            self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
             
 
     def stopClassifierCb(self, msg):
         self.stopClassifier()
-
+        
     def stopClassifier(self):
-        if self.current_model_type == "Darknet":
-            self.stopDarknetClassifier()
-        self.current_model_type = "None"
-        self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
+        if self.classifier_class != None:
+            self.classifier_class.stopClassifier()
+            self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
+            self.current_threshold = None
 
     def setThresholdCb(self, msg):
         # All we do here is update the current_threshold so that it is up-to-date in status responses
         # and will be saved properly in the config file (on request).
         if (msg.data >= self.MIN_THRESHOLD and msg.data <= self.MAX_THRESHOLD):
             self.current_threshold = msg.data
-            if self.current_model_type == "Darknet":
-                self.darknet_set_threshold_pub.publish(msg)  # Send to darknet classifier process
+            if self.classifier_class != None:
+                self.classifier_class.updateClassifierThreshold(self.current_threshold)  # Send to classifier process
 
 
     def provideClassifierList(self, req):
@@ -184,16 +196,18 @@ class AIDetectorManager:
     def provideClassifierStatus(self, req):
         # Update the loading progress if necessary
         loading_progress = 0.0
-        if self.current_classifier in self.classifier_dict.keys():
-            if (self.classifier_state == ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING):
-                loading_progress = 1.0
-            elif (self.classifier_state == ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING):
-                loading_elapsed_s = (nepi_ros.time_now() - self.classifier_load_start_time).to_sec()
-                estimated_load_time_s = self.FIXED_LOADING_START_UP_TIME_S + (self.classifier_dict[self.current_classifier]['size'] / self.ESTIMATED_WEIGHT_LOAD_RATE_BYTES_PER_SECOND)
-                if loading_elapsed_s > estimated_load_time_s:
-                    loading_progress = 0.95 # Stall at 95%
-                else:
-                    loading_progress = loading_elapsed_s / estimated_load_time_s
+        if self.classifier_class is not None:
+            self.classifier_state = self.classifier_class.getClassifierState()
+            if self.current_classifier in self.classifier_dict.keys():
+                if (self.classifier_state == ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING):
+                    loading_progress = 1.0
+                elif (self.classifier_state == ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING):
+                    loading_elapsed_s = (nepi_ros.time_now() - self.classifier_load_start_time).to_sec()
+                    estimated_load_time_s = self.FIXED_LOADING_START_UP_TIME_S + (self.classifier_dict[self.current_classifier]['size'] / self.ESTIMATED_WEIGHT_LOAD_RATE_BYTES_PER_SECOND)
+                    if loading_elapsed_s > estimated_load_time_s:
+                        loading_progress = 0.95 # Stall at 95%
+                    else:
+                        loading_progress = loading_elapsed_s / estimated_load_time_s
         return [self.current_img_topic, self.current_classifier, str(self.current_classifier_classes), \
                 self.classifier_state, loading_progress, self.current_threshold, \
                 self.has_depth_map,self.current_depth_map_topic,self.has_pointcloud,self.current_pointcloud_topic]
@@ -233,107 +247,6 @@ class AIDetectorManager:
                         nepi_msg.publishMsgInfo(self,'AI_MGR: AI_MGR: Starting classifier with parameters [' + default_classifier + ', ' + default_img_topic + ', ' + str(default_threshold) + ']')
                         self.current_img_topic = default_img_topic
                         self.startClassifier(default_classifier, default_img_topic, default_threshold)
-
-    
-
-
-
-
-    #################
-    # Darknet Model Functions
-
-    def darknetFindClassifiers(self):
-        classifier_name_list = []
-        classifier_size_list = []
-        classifier_classes_list = []
-        # Try to obtain the path to Darknet models from the system_mgr
-        try:
-            rospy.wait_for_service('system_storage_folder_query', 10.0)
-            system_storage_folder_query = rospy.ServiceProxy('system_storage_folder_query', SystemStorageFolderQuery)
-            self.DARKNET_CFG_PATH = os.path.join(system_storage_folder_query('ai_models').folder_path, 'darknet_ros')
-        except Exception as e:
-            nepi_msg.publishMsgWarn(self,"Failed to obtain system ai_models/darknet_ros folder... falling back to " + 'self.DARKNET_CFG_PATH')
-
-        darknet_cfg_path_config_folder = os.path.join(self.DARKNET_CFG_PATH, 'config')
-        # Grab the list of all existing darknet cfg files
-        self.darknet_cfg_files = glob.glob(os.path.join(darknet_cfg_path_config_folder,'*.yaml'))
-        # Remove the ros.yaml file -- that one doesn't represent a selectable trained neural net
-        try:
-            self.darknet_cfg_files.remove(os.path.join(darknet_cfg_path_config_folder,'ros.yaml'))
-        except:
-            nepi_msg.publishMsgWarn(self,"Unexpected: ros.yaml is missing from the darknet config path " + darknet_cfg_path_config_folder)
-
-        for f in self.darknet_cfg_files:
-            yaml_stream = open(f, 'r')
-            # Validate that it is a proper config file and gather weights file size info for load-time estimates
-            cfg_dict = yaml.load(yaml_stream)
-            #nepi_msg.publishMsgWarn(self,"" + str(cfg_dict))
-            
-            yaml_stream.close()
-            if ("yolo_model" not in cfg_dict) or ("weight_file" not in cfg_dict["yolo_model"]) or ("name" not in cfg_dict["yolo_model"]["weight_file"]):
-                nepi_msg.publishMsgErr(self,"Debug: " + str(cfg_dict))
-                nepi_msg.publishMsgWarn(self,"File does not appear to be a valid A/I model config file: " + f + "... not adding this classifier")
-                continue
-
-
-            classifier_name = os.path.splitext(os.path.basename(f))[0]
-            weight_file = os.path.join(self.DARKNET_CFG_PATH, "yolo_network_config", "weights",cfg_dict["yolo_model"]["weight_file"]["name"])
-            if not os.path.exists(weight_file):
-                nepi_msg.publishMsgWarn(self,"Classifier " + classifier_name + " specifies non-existent weights file " + weight_file + "... not adding this classifier")
-                continue
-            classifier_keys = list(cfg_dict.keys())
-            classifier_key = classifier_keys[0]
-            classifier_classes_list.append(cfg_dict[classifier_key]['detection_classes']['names'])
-            #nepi_msg.publishMsgWarn(self,"AI_MGR: classes: " + str(classifier_classes_list))
-            classifier_name_list.append(classifier_name)
-            classifier_size_list.append(os.path.getsize(weight_file))
-        return classifier_name_list, classifier_size_list, classifier_classes_list
-
-
-    def darknetStartClassifier(self, classifier, input_img, threshold, input_depth_map = "None", input_pointcloud = "None"):
-        # Build Darknet new classifier launch command
-        launch_cmd_line = [
-            "roslaunch", "nepi_darknet_ros", "darknet_ros.launch",
-            "namespace:=" + nepi_ros.get_node_namespace(), 
-            "yolo_weights_path:=" + os.path.join(self.DARKNET_CFG_PATH, "yolo_network_config/weights"),
-            "yolo_config_path:=" + os.path.join(self.DARKNET_CFG_PATH, "yolo_network_config/cfg"),
-            "ros_param_file:=" + os.path.join(self.DARKNET_CFG_PATH, "config/ros.yaml"),
-            "network_param_file:=" + os.path.join(self.DARKNET_CFG_PATH, "config", classifier + ".yaml"),
-            "input_img:=" + input_img, "input_depth_map:=" + input_depth_map, "input_pointcloud:=" + input_pointcloud,
-            "detection_threshold:=" + str(threshold)
-        ]
-        nepi_msg.publishMsgInfo(self,"Launching Darknet ROS Process: " + str(launch_cmd_line))
-        self.darknet_ros_process = subprocess.Popen(launch_cmd_line)
-        self.darknet_set_threshold_pub = nepi_ros.Publisher('nepi_darknet_ros/set_threshold', Float32, queue_size=1, latch=True) # Must match the node that gets launched by darknetStartClassifier()
-
-        # Setup Classifier Setup Tracking Progress
-        self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING
-        self.classifier_load_start_time = nepi_ros.time_now()        
-        self.darknet_update_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.darknetUpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
-            
-
-    def stopDarknetClassifier(self):
-        nepi_msg.publishMsgInfo(self,"Stopping classifier")
-        if not (None == self.darknet_update_sub):
-            self.darknet_update_sub.unregister()
-        if not (None == self.darknet_found_object_sub):
-            self.darknet_found_object_sub.unregister()
-            self.darknet_found_object_sub = None
-        if not (None == self.darknet_bounding_boxes_sub):
-            self.darknet_bounding_boxes_sub.unregister()
-            self.darknet_bounding_boxes_sub = None
-        if not (None == self.darknet_ros_process):
-            self.darknet_ros_process.terminate()
-            self.darknet_ros_process = None
-        self.current_classifier = "None"
-        self.current_img_topic = "None"
-        #self.current_threshold = 0.3
-
-    def darknetUpdateCb(self, msg):
-        # Means that darknet is up and running
-        self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING
-        if not (None == self.darknet_update_sub):
-            self.darknet_update_sub.unregister()
 
     
 

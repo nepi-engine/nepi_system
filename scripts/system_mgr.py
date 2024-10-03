@@ -60,12 +60,14 @@ class SystemMgrNode():
                             "nepi_full_img_archive", 
                             "nepi_src",
                             "nepi_src/nepi_drivers", 
-                            "nepi_src/nepi_apps", 
+                            "nepi_src/nepi_apps",
+                            "nepi_src/nepi_ais", 
                             "user_cfg",
                             "sample_data"]
     
     DRIVERS_PATH = '/opt/nepi/ros/lib/nepi_drivers'
-    APPS_LAUNCH_PATH = '/opt/nepi/ros/share/nepi_apps'
+    APPS_INFO_PATH = '/opt/nepi/ros/share/nepi_apps'
+    AI_IF_FOLDER_PATH = '/opt/nepi/ros/share/nepi_ai_ifs'
 
     # disk_usage_deque = deque(maxlen=10)
     # Shorter period for more responsive updates
@@ -376,13 +378,20 @@ class SystemMgrNode():
         os.system('chmod -R 0775 ' + self.DRIVERS_PATH)
         self.storage_subdirs['drivers'] = self.DRIVERS_PATH
 
-        # Do the same for the Apps Launch Folder
-        if not os.path.isdir(self.APPS_LAUNCH_PATH):
-                rospy.logwarn("Apps folder " + self.APPS_LAUNCH_PATH + " not present... will create")
-                os.makedirs(self.APPS_LAUNCH_PATH)
-        os.system('chown -R ' + str(self.storage_uid) + ':' + str(self.storage_gid) + ' ' + self.APPS_LAUNCH_PATH) # Use os.system instead of os.chown to have a recursive option
-        os.system('chmod -R 0775 ' + self.APPS_LAUNCH_PATH)
-        self.storage_subdirs['apps'] = self.APPS_LAUNCH_PATH
+        # Do the same for the Apps Info Folder
+        if not os.path.isdir(self.APPS_INFO_PATH):
+                rospy.logwarn("Apps folder " + self.APPS_INFO_PATH + " not present... will create")
+                os.makedirs(self.APPS_INFO_PATH)
+        os.system('chown -R ' + str(self.storage_uid) + ':' + str(self.storage_gid) + ' ' + self.APPS_INFO_PATH) # Use os.system instead of os.chown to have a recursive option
+        os.system('chmod -R 0775 ' + self.APPS_INFO_PATH)
+        self.storage_subdirs['apps'] = self.APPS_INFO_PATH
+        # Do the same for the AI IF Folder
+        if not os.path.isdir(self.AI_IF_FOLDER_PATH):
+                rospy.logwarn("AIF folder " + self.AI_IF_FOLDER_PATH + " not present... will create")
+                os.makedirs(self.AI_IF_FOLDER_PATH)
+        os.system('chown -R ' + str(self.storage_uid) + ':' + str(self.storage_gid) + ' ' + self.AI_IF_FOLDER_PATH) # Use os.system instead of os.chown to have a recursive option
+        os.system('chmod -R 0775 ' + self.AI_IF_FOLDER_PATH)
+        self.storage_subdirs['ais'] = self.AI_IF_FOLDER_PATH
         return True
 
     def clear_data_folder(self, msg):

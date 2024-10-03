@@ -71,7 +71,7 @@ class NepiAppsMgr(object):
     # Get app folder paths
     self.apps_folder = APPS_FALLBACK_FOLDER
     #nepi_msg.publishMsgInfo(self,"App folder set to " + self.apps_folder)
-    self.apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
+    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
     #nepi_msg.publishMsgInfo(self,"App folder files " + str(self.apps_files))
     # Get Install Apps Folder
 
@@ -251,7 +251,7 @@ class NepiAppsMgr(object):
     ###############################
     ## First update Database
     apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
-    apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
+    apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
     need_update = self.apps_files != apps_files
     if need_update:
@@ -449,7 +449,7 @@ class NepiAppsMgr(object):
   def resetMgr(self):
     # reset apps dict
     nepi_ros.set_param(self,"~backup_enabled",True)
-    self.apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
+    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
     apps_dict = nepi_apps.getAppsgetAppsDict(self.apps_folder)
     apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
@@ -463,7 +463,7 @@ class NepiAppsMgr(object):
 
   def refresh(self):
     # refresh apps dict
-    self.apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
+    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
     apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     apps_dict = nepi_apps.refreshAppsDict(self.apps_folder,apps_dict)
@@ -486,7 +486,7 @@ class NepiAppsMgr(object):
       self.selected_app = 'NONE'
       nepi_msg.publishMsgInfo(self,"Setting init values to param values")
       self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
-      self.apps_files = nepi_apps.getAppLaunchFilesList(self.apps_folder)
+      self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
       self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
       #nepi_msg.publishMsgInfo(self,str(nepi_ros.get_param(self,"~apps_dict")))
       try:
