@@ -58,7 +58,7 @@ class AIDetectorManager:
     found_object_sub = None
    
     classifier_class = None
-
+    classifier_load_start_time = 0
     #######################
     ### Node Initialization
     DEFAULT_NODE_NAME = "drivers_mgr" # Can be overwitten by luanch command
@@ -70,6 +70,7 @@ class AIDetectorManager:
         nepi_msg.createMsgPublishers(self)
         nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
         ##############################
+        self.classifier_load_start_time = nepi_ros.time_now()
         # Find AI Frameworks
         ais_dict = nepi_ais.getAIsDict(self.AI_IF_SEARCH_PATH)
         nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
@@ -127,13 +128,13 @@ class AIDetectorManager:
         #########################################################
 
     def startClassifierCb(self, classifier_selection_msg):
-        classifier=classifier_selection_msg.classifier
+        classifier_name=classifier_selection_msg.classifier
         input_img=classifier_selection_msg.img_topic
         threshold=classifier_selection_msg.detection_threshold
-        self.startClassifier(classifier, input_img, threshold)
+        self.startClassifier(classifier_name, input_img, threshold)
 
 
-    def startClassifier(self, classifier, input_img, threshold):
+    def startClassifier(self, classifier_name, input_img, threshold):
         # Check that the requested topic exists and has the expected type
         all_topics = nepi_ros.get_published_topics()
         found_topic = False
@@ -151,23 +152,25 @@ class AIDetectorManager:
             return
 
         # Check that the requested classifier exists
-        if not (classifier in self.classifier_dict.keys()):
-            nepi_msg.publishMsgErr(self,"Unknown classifier requested: " + classifier)
+        if not (classifier_name in self.classifier_dict.keys()):
+            nepi_msg.publishMsgErr(self,"Unknown classifier requested: " + classifier_name)
             return
         # Stop the current classifier if it is running
         self.stopClassifier()
         time.sleep(1)
 
         # Update our local status
-        self.current_classifier = classifier
-        self.current_classifier_classes = self.classifier_dict[classifier]['classes']
+        self.current_classifier = classifier_name
+        self.current_classifier_classes = self.classifier_dict[classifier_name]['classes']
         self.current_img_topic = input_img
         self.current_threshold = threshold
  
         # Start the classifier
-        classifier_class = self.classifier_dict[classifier]['class']
+        classifier = self.classifier_dict[classifier_name]['name']
+        classifier_class = self.classifier_dict[classifier_name]['class']
         self.classifier_class = classifier_class
-        self.classifier_class.startClassifier(classifier=self.current_classifier, input_img=self.current_img_topic, threshold=self.current_threshold)
+        self.classifier_load_start_time = nepi_ros.time_now()
+        self.classifier_class.startClassifier(classifier=classifier, input_img=self.current_img_topic, threshold=self.current_threshold)
         if self.found_object_sub is not None:
             self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
             
@@ -205,7 +208,8 @@ class AIDetectorManager:
                     loading_elapsed_s = (nepi_ros.time_now() - self.classifier_load_start_time).to_sec()
                     estimated_load_time_s = self.FIXED_LOADING_START_UP_TIME_S + (self.classifier_dict[self.current_classifier]['size'] / self.ESTIMATED_WEIGHT_LOAD_RATE_BYTES_PER_SECOND)
                     if loading_elapsed_s > estimated_load_time_s:
-                        loading_progress = 0.95 # Stall at 95%
+                        loading_progress = 1.0
+                        self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING
                     else:
                         loading_progress = loading_elapsed_s / estimated_load_time_s
         return [self.current_img_topic, self.current_classifier, str(self.current_classifier_classes), \
