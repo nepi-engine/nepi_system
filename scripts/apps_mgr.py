@@ -313,10 +313,13 @@ class NepiAppsMgr(object):
           #Try and initialize app param values
           config_file_path = APPS_CONFIG_FALLBACK_FOLDER + "/" + app_config_file_name.split(".")[0] + "/" + app_config_file_name
           params_namespace = self.base_namespace + app_node_name
-          try:
-            nepi_ros.load_params_from_file(config_file_path, params_namespace)
-          except Exception as e:
-            nepi_msg.publishMsgInfo(self,"No config file found for app: " + app_node_name + " starting with factory settings")
+          if os.path.exists(config_file_path):
+            try:
+              nepi_ros.load_params_from_file(config_file_path, params_namespace)
+            except Exception as e:
+              nepi_msg.publishMsgWarn(self,"Could not get params from config file: " + config_file_path + " " + str(e))
+          else:
+            nepi_msg.publishMsgWarn(self,"Could not find config file at: " + config_file_path + " starting with factory settings")
           #Try and launch node
           nepi_msg.publishMsgInfo(self,"")
           nepi_msg.publishMsgInfo(self,"Launching application node: " + app_node_name)

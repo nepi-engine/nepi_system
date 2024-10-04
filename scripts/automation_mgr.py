@@ -139,7 +139,7 @@ class AutomationManager:
         # Ensure all known scripts have a script_config
         for script_name in script_list:
             if script_name not in self.script_configs:
-                nepi_msg.publishMsgWarn(self,"Initializing config for " + script_name)
+                #nepi_msg.publishMsgWarn(self,"Initializing config for " + script_name)
                 self.script_configs[script_name] = {'auto_start': False, 'cmd_line_args': ''}
 
                 # Good place to dos2unix it

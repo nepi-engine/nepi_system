@@ -77,7 +77,7 @@ class AIDetectorManager:
         self.classifier_load_start_time = nepi_ros.time_now()
         # Find AI Frameworks
         ais_dict = nepi_ais.getAIsDict(self.AI_IF_SEARCH_PATH)
-        nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
+        #nepi_msg.publishMsgInfo(self,"Got ais dict " + str(ais_dict))
         for ai_name in ais_dict.keys():
             ai_dict = ais_dict[ai_name]
             file_name = ai_dict['if_file']
