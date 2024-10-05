@@ -30,7 +30,7 @@ from nepi_edge_sdk_base.save_cfg_if import SaveCfgIF
 
 
 class AIDetectorManager:
-    AI_IF_SEARCH_PATH = '/opt/nepi/ros/share/nepi_ai_ifs'
+    AI_IF_FOLDER_PATH = '/opt/nepi/ros/share/nepi_ai_ifs'
     AI_MODEL_LIB_PATH = '/mnt/nepi_storage/ai_models/'
     # AI Detection Setttings
     NODE_NAME = "ai_detector_mgr"
@@ -76,7 +76,7 @@ class AIDetectorManager:
         self.class_dict = dict()
         self.classifier_load_start_time = nepi_ros.time_now()
         # Find AI Frameworks
-        ais_dict = nepi_ais.getAIsDict(self.AI_IF_SEARCH_PATH)
+        ais_dict = nepi_ais.getAIsDict(self.AI_IF_FOLDER_PATH)
         #nepi_msg.publishMsgInfo(self,"Got ais dict " + str(ais_dict))
         for ai_name in ais_dict.keys():
             ai_dict = ais_dict[ai_name]
@@ -90,7 +90,7 @@ class AIDetectorManager:
                 break
             else:
                 try:
-                    class_instance = ai_class(ai_dict,self.node_namespace)
+                    class_instance = ai_class(ai_dict,self.node_namespace,self.AI_MODEL_LIB_PATH)
                     time.sleep(1) # Give some time for publishers to set in class init
                 except Exception as e:
                     nepi_msg.publishMsgWarn(self,"Failed to instantiate ai framework class " + class_name + " " + str(e))
