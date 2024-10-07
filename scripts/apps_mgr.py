@@ -198,7 +198,7 @@ class NepiAppsMgr(object):
     self.status_apps_msg = self.getAppsStatusMsg()
     if not nepi_ros.is_shutdown():
       self.apps_status_pub.publish(self.status_apps_msg)
-    self.save_cfg_if.saveConfig(do_param_updates = False) # Save config after initialization for appt time
+    self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
 
   def getAppsStatusMsg(self):
     apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
