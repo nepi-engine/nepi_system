@@ -374,7 +374,6 @@ class NepiDriversMgr(object):
               pass # ToDo
             if 'IP' in discovery_interfaces:
               pass # ToDo
-          time.sleep(1)
 
       ################################    
       ## Check and purge disabled driver proccess that might be running
