@@ -309,7 +309,7 @@ class NepiAppsMgr(object):
         app_path_name = app_dict['APP_DICT']['app_path']
         app_node_name = app_dict['APP_DICT']['node_name']
         app_file_path = app_path_name + '/' + app_file_name
-        if app_node_name not in node_list: #node_list:
+        if app_name not in self.apps_active_dict.keys():
           #Try and initialize app param values
           config_file_path = APPS_CONFIG_FALLBACK_FOLDER + "/" + app_config_file_name.split(".")[0] + "/" + app_config_file_name
           params_namespace = self.base_namespace + app_node_name
@@ -329,11 +329,6 @@ class NepiAppsMgr(object):
             self.apps_active_dict[app_name]=dict()
             self.apps_active_dict[app_name]['node_name'] = app_node_name
             self.apps_active_dict[app_name]['subprocess'] = sub_process
-          else:
-            apps_dict[app_name]['msg'] = msg
-        else:
-          apps_dict[app_name]['msg'] = "App process running"
-        time.sleep(1)
 
     # Publish Status
     self.publish_status()

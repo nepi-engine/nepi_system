@@ -20,7 +20,7 @@ from nepi_edge_sdk_base import nepi_msg
 from std_msgs.msg import Empty, Float32
 from rospy.numpy_msg import numpy_msg
 from cv_bridge import CvBridge
-from nepi_ros_interfaces.msg import UpdateState
+from nepi_ros_interfaces.msg import UpdateState, AiFrameworksStatus
 from nepi_ros_interfaces.srv import ImageClassifierListQuery, ImageClassifierListQueryResponse
 from nepi_ros_interfaces.srv import ImageClassifierStatusQuery, ImageClassifierStatusQueryResponse, SystemStorageFolderQuery
 from nepi_ros_interfaces.msg import BoundingBoxes, ObjectCount,ClassifierSelection, StringArray, TargetLocalization
@@ -50,9 +50,9 @@ class AIDetectorManager:
     current_model_type = "None"
     current_img_topic = "None"
     has_depth_map = False
-    current_depth_map_topic = "None"
+    depth_map_topic = "None"
     has_pointcloud = False
-    current_pointcloud_topic = "None"
+    pointcloud_topic = "None"
     current_threshold = 0.3
     classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
     classifier_load_start_time = None
@@ -64,29 +64,30 @@ class AIDetectorManager:
     save_cfg_if = None
     #######################
     ### Node Initialization
-    DEFAULT_NODE_NAME = "drivers_mgr" # Can be overwitten by luanch command
+    DEFAULT_NODE_NAME = "ai_detector_mgr" # Can be overwitten by luanch command
     def __init__(self):
         #### MGR NODE INIT SETUP ####
         nepi_ros.init_node(name= self.DEFAULT_NODE_NAME)
         self.node_name = nepi_ros.get_node_name()
-        self.node_namespace = nepi_ros.get_node_namespace()
         self.base_namespace = nepi_ros.get_base_namespace()
         nepi_msg.createMsgPublishers(self)
         nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
         ##############################
-        ais_dict = dict()
-        models_dict = dict()
+        self.models_dict = dict()
         self.class_dict = dict()
         self.classifier_load_start_time = nepi_ros.time_now()
         # Find AI Frameworks
         # Get ai framework dict form param server and update
+        ais_dict = nepi_ais.getAIsDict(self.AI_IF_FOLDER_PATH)
+        #nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
         self.init_ais_dict = nepi_ros.get_param(self,'~ais_dict', ais_dict)
         self.init_ais_dict = nepi_ais.updateAIsDict(self.AI_IF_FOLDER_PATH,self.init_ais_dict)
         nepi_ros.set_param(self,'~ais_dict', self.init_ais_dict)
-        nepi_msg.publishMsgInfo(self,"Got ais dict " + str(self.init_ais_dict))
-        for ai_name in ais_dict.keys():
-            ai_dict = ais_dict[ai_name]
+        #nepi_msg.publishMsgWarn(self,"Got updated ais dict from param server " + str(self.init_ais_dict))
+        for ai_name in self.init_ais_dict.keys():
+            ai_dict = self.init_ais_dict[ai_name]
             if ai_dict['active']:
+                nepi_msg.publishMsgInfo(self,"Updating ai dict for framework: " + str(ai_name))
                 file_name = ai_dict['if_file']
                 file_path = ai_dict['if_path']
                 module_name = ai_dict['module_name']
@@ -97,7 +98,9 @@ class AIDetectorManager:
                     break
                 else:
                     try:
-                        class_instance = ai_class(ai_dict,self.node_namespace,self.AI_MODEL_LIB_PATH)
+                        nepi_msg.publishMsgInfo(self,"Instantiating IF class for framework type: " + str(ai_name))
+                        node_base_namespace = os.path.join(self.base_namespace, self.node_name)
+                        class_instance = ai_class(ai_dict,node_base_namespace,self.AI_MODEL_LIB_PATH)
                         time.sleep(1) # Give some time for publishers to set in class init
                     except Exception as e:
                         nepi_msg.publishMsgWarn(self,"Failed to instantiate ai framework class " + class_name + " " + str(e))
@@ -108,29 +111,31 @@ class AIDetectorManager:
                             model_dict = models_dict[model_name]
                             model_dict['type'] = ai_name
                             model_dict['active'] = True
-                            models_dict[model_name] = model_dict
+                            self.models_dict[model_name] = model_dict
                             self.class_dict[model_name] = class_instance
                     except Exception as e:
-                        nepi_msg.publishMsgWarn(self,"Failed to get models from class " + class_name)
+                        nepi_msg.publishMsgWarn(self,"Failed to get models from class " + class_name + " " + str(e))
                         break
                     
                     if (len(model_dict.keys()) < 1):
                         nepi_msg.publishMsgWarn(self,"No classiers identified for this system at " + file_path)
+                    else:
+                        nepi_msg.publishMsgInfo(self,"Got models for framework type: " + str(ai_name) + " from param server " + str(self.models_dict.keys()))
         # Update models dict against imported param dict
-        self.init_models_dict = nepi_ros.get_param(self,'~models_dict', models_dict)
+        #nepi_msg.publishMsgWarn(self,"Got models dict from nepi_ais call " + str(self.models_dict))
+        self.init_models_dict = nepi_ros.get_param(self,'~models_dict', self.models_dict)
         nepi_ros.set_param(self,'~models_dict', self.init_models_dict)
-        nepi_msg.publishMsgInfo(self,"Got models dict " + str(self.init_models_dict))
         purge_list = []
         for model_name in self.init_models_dict.keys():
-            if model_name not in models_dict.keys():
+            if model_name not in self.models_dict.keys():
                 purge_list.append(model_name)
         for model_name in purge_list:
-            del models_dict[model_name]
-        for model_name in models_dict.keys():
+            del self.init_models_dict[model_name]
+        for model_name in self.models_dict.keys():
             if model_name not in self.init_models_dict.keys():
-                self.init_models_dict[model_name] = models_dict[model_name]
+                self.init_models_dict[model_name] = self.models_dict[model_name]
         nepi_ros.set_param(self,'~models_dict', self.init_models_dict)
-        #nepi_msg.publishMsgWarn(self,"Storing classifier dict in param server: " + str(models_dict))
+        #nepi_msg.publishMsgWarn(self,"Storing classifier dict in param server: " + str(self.init_models_dict))
        
         
 
@@ -155,7 +160,8 @@ class AIDetectorManager:
         rospy.Subscriber('~enable_all_models', Empty, self.enableAllModelsCb, queue_size = 10)
         rospy.Subscriber('~disable_all_models', Empty, self.disableAllModelsCb, queue_size = 10)
         rospy.Subscriber('~update_model_state', UpdateState, self.updateModelStateCb)
-
+        # Create status pub
+        self.apps_status_pub = rospy.Publisher("~status", AiFrameworksStatus, queue_size=1, latch=True)
 
         # Setup config IF system
         self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.setCurrentSettingsAsDefault, paramsModifiedCallback=self.updateFromParamServer)
@@ -163,6 +169,7 @@ class AIDetectorManager:
         # Load default params
         self.updateFromParamServer()
         self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.publish_status()
         #########################################################
         ## Initiation Complete
         nepi_msg.publishMsgInfo(self,"Initialization Complete")
@@ -170,24 +177,36 @@ class AIDetectorManager:
         nepi_ros.spin()
         #########################################################
 
+    def publish_status(self):
+        ais_dict = nepi_ros.get_param(self,"~ais_dict",self.init_ais_dict)
+        models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
+        status_msg = AiFrameworksStatus()
+        status_msg.ai_frameworks = nepi_ais.getAIsSortedList(ais_dict)
+        status_msg.active_ai_frameworks = nepi_ais.getAIsActiveSortedList(ais_dict)
+        status_msg.ai_models = nepi_ais.getModelsSortedList(models_dict)
+        status_msg.active_ai_models = nepi_ais.getModelsActiveSortedList(models_dict)
+        if not nepi_ros.is_shutdown():
+            self.apps_status_pub.publish(status_msg)
+
+
     def startClassifierCb(self, classifier_selection_msg):
         classifier_name=classifier_selection_msg.classifier
-        input_img=classifier_selection_msg.img_topic
+        source_img_topic=classifier_selection_msg.img_topic
         threshold=classifier_selection_msg.detection_threshold
-        self.startClassifier(classifier_name, input_img, threshold)
+        self.startClassifier(classifier_name, source_img_topic, threshold)
 
 
-    def startClassifier(self, classifier_name, input_img, threshold):
+    def startClassifier(self, classifier_name, source_img_topic, threshold):
         models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
         # Check that the requested topic exists and has the expected type
         all_topics = nepi_ros.get_published_topics()
         found_topic = False
         for t in all_topics:
-            if (t[0] == input_img) and (t[1] == 'sensor_msgs/Image'):
+            if (t[0] == source_img_topic) and (t[1] == 'sensor_msgs/Image'):
                 found_topic = True
                 break
         if (False == found_topic):
-            nepi_msg.publishMsgErr(self,"Topic " + input_img + " is not a valid image topic -- not starting classifier")
+            nepi_msg.publishMsgErr(self,"Topic " + source_img_topic + " is not a valid image topic -- not starting classifier")
             return
             
         # Validate the requested_detection threshold
@@ -208,7 +227,7 @@ class AIDetectorManager:
         # Update our local status
         self.current_classifier = classifier_name
         self.current_classifier_classes = models_dict[classifier_name]['classes']
-        self.current_img_topic = input_img
+        self.current_img_topic = source_img_topic
         self.current_threshold = threshold
  
         # Start the classifier
@@ -217,7 +236,7 @@ class AIDetectorManager:
         classifier_class = self.class_dict[classifier_name]
         self.classifier_class = classifier_class
         self.classifier_load_start_time = nepi_ros.time_now()
-        self.classifier_class.startClassifier(classifier=classifier, input_img=self.current_img_topic, threshold=self.current_threshold)
+        self.classifier_class.startClassifier(classifier=classifier, source_img_topic=self.current_img_topic, threshold=self.current_threshold)
         if self.found_object_sub is not None:
             self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
         self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING        
@@ -251,7 +270,7 @@ class AIDetectorManager:
             threshold = self.MIN_THRESHOLD
         elif (threshold > self.MAX_THRESHOLD):
             threshold = self.MAX_THRESHOLD
-        self.current_threshold = msg.data
+        self.current_threshold = threshold
         if self.classifier_class != None:
             self.classifier_class.updateClassifierThreshold(self.current_threshold)  # Send to classifier process
 
@@ -261,6 +280,7 @@ class AIDetectorManager:
         nepi_ros.set_param(self,"~ais_dict",ais_dict)
         if self.save_cfg_if is not None:
             self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.publish_status()
 
     def disableAllFwsCb(self,msg):
         ais_dict = nepi_ros.get_param(self,"~ais_dict",self.init_ais_dict)
@@ -268,6 +288,7 @@ class AIDetectorManager:
         nepi_ros.set_param(self,"~ais_dict",ais_dict)
         if self.save_cfg_if is not None:
             self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.publish_status()
 
     def updateFwStateCb(self,msg):
         nepi_msg.publishMsgInfo(self,str(msg))
@@ -285,6 +306,7 @@ class AIDetectorManager:
         nepi_ros.set_param(self,"~ais_dict",ais_dict)
         if self.save_cfg_if is not None:
             self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.publish_status()
 
     def enableAllModelsCb(self,msg):
         models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
@@ -292,6 +314,7 @@ class AIDetectorManager:
         nepi_ros.set_param(self,"~models_dict",models_dict)
         if self.save_cfg_if is not None:
             self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.publish_status()
 
     def disableAllModelsCb(self,msg):
         models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
@@ -299,6 +322,7 @@ class AIDetectorManager:
         nepi_ros.set_param(self,"~models_dict",models_dict)
         if self.save_cfg_if is not None:
             self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.publish_status()
 
     def updateModelStateCb(self,msg):
         nepi_msg.publishMsgInfo(self,str(msg))
@@ -316,6 +340,7 @@ class AIDetectorManager:
         nepi_ros.set_param(self,"~models_dict",models_dict)
         if self.save_cfg_if is not None:
             self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.publish_status()
 
 
     def provideClassifierList(self, req):
@@ -347,9 +372,36 @@ class AIDetectorManager:
                         loading_progress = .95
                     else:
                         loading_progress = loading_elapsed_s / estimated_load_time_s
+
+
+        # Look for Depth Map
+        if self.current_img_topic != "None":
+            depth_map_topic = self.current_img_topic.rsplit('/',1)[0] + "/depth_map"
+            depth_map_topic = nepi_ros.find_topic(depth_map_topic)
+            if depth_map_topic == "":
+                depth_map_topic = "None"
+                self.has_depth_map = False
+            else:
+                self.has_depth_map = True
+                self.depth_map_topic = depth_map_topic
+            # check for pointdcloud
+            pointcloud_topic = self.current_img_topic.rsplit('/',1)[0] + "/pointcloud"
+            pointcloud_topic = nepi_ros.find_topic(pointcloud_topic)
+            if pointcloud_topic == "":
+                pointcloud_topic = "None"
+                self.has_pointcloud = False
+            else:
+                self.has_pointcloud = True
+                self.pointcloud_topic = pointcloud_topic     
+        else:
+            depth_map_topic = "None"
+            self.has_depth_map = False
+            pointcloud_topic = "None"
+            self.has_pointcloud = False
+
         return [self.current_img_topic, self.current_classifier, str(self.current_classifier_classes), \
                 self.classifier_state, loading_progress, self.current_threshold, \
-                self.has_depth_map,self.current_depth_map_topic,self.has_pointcloud,self.current_pointcloud_topic]
+                self.has_depth_map,self.depth_map_topic,self.has_pointcloud,self.pointcloud_topic]
 
 
 

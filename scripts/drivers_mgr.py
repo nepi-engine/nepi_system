@@ -322,7 +322,7 @@ class NepiDriversMgr(object):
           # Check Auto-Node processes
           if discovery_method == 'AUTO' and discovery_process == "LAUNCH":
             discovery_node_name = discovery_name.lower() + "_discovery"
-            if discovery_node_name not in node_list:
+            if drv_name not in self.discovery_active_dict.keys():
               #Setup required param server drv_dict for discovery node
               dict_param_name = discovery_node_name + "/drv_dict"
               nepi_ros.set_param(self,dict_param_name,drv_dict)
@@ -337,6 +337,7 @@ class NepiDriversMgr(object):
                 self.discovery_active_dict[drv_name]['node_name'] = discovery_node_name
                 self.discovery_active_dict[drv_name]['subprocess'] = sub_process
               else:
+                nepi_msg.publishMsgInfo(self,"Failed to Launch discovery process: " + discovery_node_name )
                 drvs_dict[drv_name]['msg'] = msg
             else:
               drvs_dict[drv_name]['msg'] = "Discovery process running"
