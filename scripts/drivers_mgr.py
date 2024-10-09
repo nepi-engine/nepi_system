@@ -76,10 +76,11 @@ class NepiDriversMgr(object):
     self.node_name = nepi_ros.get_node_name()
     self.base_namespace = nepi_ros.get_base_namespace()
     nepi_msg.createMsgPublishers(self)
-    nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
+    #nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
     ##############################
     self.init_active_list = nepi_ros.get_param(self,"~active_list",[])
     nepi_ros.set_param(self,"~active_list",self.init_active_list)
+    #nepi_msg.publishMsgWarn(self,"Got init factory active drivers list: " + str(self.init_active_list))
     # Get driver folder paths
     self.drivers_folder = DRIVERS_FALLBACK_FOLDER
     #nepi_msg.publishMsgInfo(self,"Driver folder set to " + self.drivers_folder)
@@ -455,28 +456,31 @@ class NepiDriversMgr(object):
       #nepi_msg.publishMsgInfo(self,str(nepi_ros.get_param(self,"~drvs_dict")))
       none_dict = dict(NoneDict = "None")
       drvs_dict = nepi_ros.get_param(self,"~drvs_dict",none_dict)
+      #nepi_drv.printDict(drvs_dict)
       if 'NoneDict' not in drvs_dict.keys():
-        drvs_dict = nepi_drv.updateDriversDict(self.drivers_folder,dict())
-        nepi_msg.publishMsgInfo(self,"Got drvs_dict values from param server")
+        drvs_dict = nepi_drv.updateDriversDict(self.drivers_folder,drvs_dict)
+        nepi_msg.publishMsgWarn(self,"Got drvs_dict values from param server")
       else:
+        nepi_msg.publishMsgWarn(self,"No saved drvs_dict in config, creating a a new database")
         drvs_dict = nepi_drv.getDriversDict(self.drivers_folder)
         drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
         active_list = nepi_ros.get_param(self,"~active_list",self.init_active_list)
+        #nepi_msg.publishMsgWarn(self,"Got factory active drivers list: " + str(active_list))
         if 'ALL' in active_list:
-          nepi_msg.publishMsgWarn(self,"No saved config, setting all drivers active")
+          #nepi_msg.publishMsgWarn(self,"No saved config, setting all drivers active")
           drvs_dict = nepi_drv.activateAllDrivers(drvs_dict)
         else:  
           drvs_dict = nepi_drv.initDriversActive(active_list,drvs_dict)
-      #self.printND()
+      #nepi_drv.printDict(drvs_dict)
       self.init_drvs_dict = drvs_dict
       nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
       self.drivers_ordered_list = nepi_drv.getDriversOrderedList(drvs_dict)
       self.drivers_active_list = nepi_drv.getDriversActiveOrderedList(drvs_dict)
       self.init_active_list = self.drivers_active_list
       nepi_ros.set_param(self,"~active_list",self.init_active_list)
-      #self.printND()
+      #nepi_drv.printDict(drvs_dict)
       self.resetParamServer(do_updates)
-      #self.printND()
+      #nepi_drv.printDict(drvs_dict)
 
   def resetParamServer(self,do_updates = True):
       nepi_ros.set_param(self,"~backup_enabled",self.init_backup_enabled)

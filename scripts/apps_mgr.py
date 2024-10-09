@@ -402,7 +402,7 @@ class NepiAppsMgr(object):
       none_dict = dict(NoneDict = "None")
       apps_dict = nepi_ros.get_param(self,"~apps_dict",none_dict)
       if 'NoneDict' not in apps_dict.keys():
-        apps_dict = nepi_ros.get_param(self,"~apps_dict",dict())
+        apps_dict = nepi_ros.get_param(self,"~apps_dict",apps_dict)
         apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
       else:
         apps_dict = nepi_apps.getAppsDict(self.apps_folder)
