@@ -168,7 +168,7 @@ class AIDetectorManager:
 
         # Load default params
         self.updateFromParamServer()
-        self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.saveEnabledSettings() # Save config
         self.publish_status()
         #########################################################
         ## Initiation Complete
@@ -274,20 +274,30 @@ class AIDetectorManager:
         if self.classifier_class != None:
             self.classifier_class.updateClassifierThreshold(self.current_threshold)  # Send to classifier process
 
+    def saveEnabledSettings(self):
+        # Clear classifier and image setting
+        nepi_ros.set_param(self,'~default_classifier', "None")
+        nepi_ros.set_param(self,'~default_image', "None")
+        # Save framework and model dictionaries
+        self.save_cfg_if.saveConfig(do_param_updates = False) # Save config after initialization for drvt time
+        # Reset classifier and image settings
+        nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
+        nepi_ros.set_param(self,'~default_image', self.current_img_topic)
+
+
+
     def enableAllFwsCb(self,msg):
         ais_dict = nepi_ros.get_param(self,"~ais_dict",self.init_ais_dict)
         ais_dict = nepi_ais.activateAllFws(ais_dict)
         nepi_ros.set_param(self,"~ais_dict",ais_dict)
-        if self.save_cfg_if is not None:
-            self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.saveEnabledSettings() # Save config
         self.publish_status()
 
     def disableAllFwsCb(self,msg):
         ais_dict = nepi_ros.get_param(self,"~ais_dict",self.init_ais_dict)
         ais_dict = nepi_ais.disableAllFws(ais_dict)
         nepi_ros.set_param(self,"~ais_dict",ais_dict)
-        if self.save_cfg_if is not None:
-            self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.saveEnabledSettings() # Save config
         self.publish_status()
 
     def updateFwStateCb(self,msg):
@@ -304,24 +314,21 @@ class AIDetectorManager:
                 else:
                     ais_dict = nepi_ais.disableFw(ai_name,ais_dict)
         nepi_ros.set_param(self,"~ais_dict",ais_dict)
-        if self.save_cfg_if is not None:
-            self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.saveEnabledSettings() # Save config
         self.publish_status()
 
     def enableAllModelsCb(self,msg):
         models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
         models_dict = nepi_ais.activateAllModels(models_dict)
         nepi_ros.set_param(self,"~models_dict",models_dict)
-        if self.save_cfg_if is not None:
-            self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.saveEnabledSettings() # Save config
         self.publish_status()
 
     def disableAllModelsCb(self,msg):
         models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
         models_dict = nepi_ais.disableAllModels(models_dict)
         nepi_ros.set_param(self,"~models_dict",models_dict)
-        if self.save_cfg_if is not None:
-            self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.saveEnabledSettings() # Save config
         self.publish_status()
 
     def updateModelStateCb(self,msg):
@@ -338,8 +345,7 @@ class AIDetectorManager:
                 else:
                     models_dict = nepi_ais.disableModel(model_name,models_dict)
         nepi_ros.set_param(self,"~models_dict",models_dict)
-        if self.save_cfg_if is not None:
-            self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+        self.saveEnabledSettings() # Save config
         self.publish_status()
 
 
