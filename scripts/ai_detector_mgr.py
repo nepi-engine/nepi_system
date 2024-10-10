@@ -23,7 +23,7 @@ from cv_bridge import CvBridge
 from nepi_ros_interfaces.msg import UpdateState, AiFrameworksStatus
 from nepi_ros_interfaces.srv import ImageClassifierListQuery, ImageClassifierListQueryResponse
 from nepi_ros_interfaces.srv import ImageClassifierStatusQuery, ImageClassifierStatusQueryResponse, SystemStorageFolderQuery
-from nepi_ros_interfaces.msg import BoundingBoxes, ObjectCount,ClassifierSelection, StringArray, TargetLocalization
+from nepi_ros_interfaces.msg import BoundingBoxes, ObjectCount,ClassifierSelection
 
 
 from nepi_edge_sdk_base.save_cfg_if import SaveCfgIF
@@ -86,6 +86,7 @@ class AIDetectorManager:
         #nepi_msg.publishMsgWarn(self,"Got updated ais dict from param server " + str(self.init_ais_dict))
         for ai_name in self.init_ais_dict.keys():
             ai_dict = self.init_ais_dict[ai_name]
+            nepi_msg.publishMsgInfo(self,"Processing ais dict for ai name " + ai_name + " " + str(ai_dict))
             if ai_dict['active']:
                 nepi_msg.publishMsgInfo(self,"Updating ai dict for framework: " + str(ai_name))
                 file_name = ai_dict['if_file']
@@ -97,30 +98,33 @@ class AIDetectorManager:
                     nepi_msg.publishMsgWarn(self,"Failed to import ai framework if file " + file_name)
                     break
                 else:
+                    success = False
                     try:
                         nepi_msg.publishMsgInfo(self,"Instantiating IF class for framework type: " + str(ai_name))
-                        node_base_namespace = os.path.join(self.base_namespace, self.node_name)
-                        class_instance = ai_class(ai_dict,node_base_namespace,self.AI_MODEL_LIB_PATH)
+                        pub_sub_namespace = os.path.join(self.base_namespace, self.node_name)
+                        class_instance = ai_class(ai_dict,pub_sub_namespace,self.AI_MODEL_LIB_PATH)
+                        success = True
                         time.sleep(1) # Give some time for publishers to set in class init
                     except Exception as e:
                         nepi_msg.publishMsgWarn(self,"Failed to instantiate ai framework class " + class_name + " " + str(e))
-                        break
-                    try:
-                        models_dict = class_instance.getModelsDict()
-                        for model_name in models_dict.keys():
-                            model_dict = models_dict[model_name]
-                            model_dict['type'] = ai_name
-                            model_dict['active'] = True
-                            self.models_dict[model_name] = model_dict
-                            self.class_dict[model_name] = class_instance
-                    except Exception as e:
-                        nepi_msg.publishMsgWarn(self,"Failed to get models from class " + class_name + " " + str(e))
-                        break
-                    
-                    if (len(model_dict.keys()) < 1):
-                        nepi_msg.publishMsgWarn(self,"No classiers identified for this system at " + file_path)
-                    else:
-                        nepi_msg.publishMsgInfo(self,"Got models for framework type: " + str(ai_name) + " from param server " + str(self.models_dict.keys()))
+
+                    if success:
+                        try:
+                            models_dict = class_instance.getModelsDict()
+                            for model_name in models_dict.keys():
+                                model_dict = models_dict[model_name]
+                                model_dict['type'] = ai_name
+                                model_dict['active'] = True
+                                self.models_dict[model_name] = model_dict
+                                self.class_dict[model_name] = class_instance
+                        except Exception as e:
+                            nepi_msg.publishMsgWarn(self,"Failed to get models from class " + class_name + " " + str(e))
+                            break
+                        
+                        if (len(model_dict.keys()) < 1):
+                            nepi_msg.publishMsgWarn(self,"No classiers identified for this system at " + file_path)
+                        else:
+                            nepi_msg.publishMsgInfo(self,"Got models for framework type: " + str(ai_name) + " from param server " + str(self.models_dict.keys()))
         # Update models dict against imported param dict
         #nepi_msg.publishMsgWarn(self,"Got models dict from nepi_ais call " + str(self.models_dict))
         self.init_models_dict = nepi_ros.get_param(self,'~models_dict', self.models_dict)
@@ -190,6 +194,7 @@ class AIDetectorManager:
 
 
     def startClassifierCb(self, classifier_selection_msg):
+        nepi_msg.publishMsgWarn(self,"Got start classifier msg: " + str(classifier_selection_msg))
         classifier_name=classifier_selection_msg.classifier
         source_img_topic=classifier_selection_msg.img_topic
         threshold=classifier_selection_msg.detection_threshold
@@ -236,6 +241,7 @@ class AIDetectorManager:
         classifier_class = self.class_dict[classifier_name]
         self.classifier_class = classifier_class
         self.classifier_load_start_time = nepi_ros.time_now()
+        nepi_msg.publishMsgWarn(self,"Starting classifier " + classifier_name + " with classifier " + classifier)
         self.classifier_class.startClassifier(classifier=classifier, source_img_topic=self.current_img_topic, threshold=self.current_threshold)
         if self.found_object_sub is not None:
             self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
@@ -257,6 +263,8 @@ class AIDetectorManager:
     def stopClassifier(self):
         if self.classifier_class != None:
             self.classifier_class.stopClassifier()
+            time.sleep(1)
+            self.classifier_class = None
             if not (None == self.update_state_sub):
                 self.update_state_sub.unregister()
             self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
@@ -264,15 +272,14 @@ class AIDetectorManager:
 
     def setThresholdCb(self, msg):
         # All we do here is update the current_threshold so that it is up-to-date in status responses
-        # and will be saved properly in the config file (on request).
+        # and will be saved properly in the config file (on request).  The actual threshold update is
+        # done by ai framework node
         threshold = msg.data
         if (threshold < self.MIN_THRESHOLD):
             threshold = self.MIN_THRESHOLD
         elif (threshold > self.MAX_THRESHOLD):
             threshold = self.MAX_THRESHOLD
         self.current_threshold = threshold
-        if self.classifier_class != None:
-            self.classifier_class.updateClassifierThreshold(self.current_threshold)  # Send to classifier process
 
     def saveEnabledSettings(self):
         # Clear classifier and image setting
