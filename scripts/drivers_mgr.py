@@ -76,7 +76,7 @@ class NepiDriversMgr(object):
     self.node_name = nepi_ros.get_node_name()
     self.base_namespace = nepi_ros.get_base_namespace()
     nepi_msg.createMsgPublishers(self)
-    #nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
+    nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
     ##############################
     self.init_active_list = nepi_ros.get_param(self,"~active_list",[])
     nepi_ros.set_param(self,"~active_list",self.init_active_list)
