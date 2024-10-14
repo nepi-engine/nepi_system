@@ -162,19 +162,22 @@ class NepiAppsMgr(object):
     status_app_msg.name = app_name
     if app_name in apps_dict.keys() and app_name != 'NONE':
       app = apps_dict[app_name]
-      status_app_msg.pkg_name = app['APP_DICT']['pkg_name']
-      status_app_msg.description = app['APP_DICT']['description']
-      status_app_msg.node_name = app['APP_DICT']['node_name']
-      status_app_msg.app_file = app['APP_DICT']['app_file']
-      status_app_msg.app_path = app['APP_DICT']['app_path']   
-      status_app_msg.rui_files_list = app['RUI_DICT']['rui_files']
-      status_app_msg.rui_main_file = app['RUI_DICT']['rui_main_file']
-      status_app_msg.rui_main_class = app['RUI_DICT']['rui_main_class']  
-      status_app_msg.rui_menu_name = app['RUI_DICT']['rui_menu_name']
-
-      status_app_msg.active_state  = app['active']
-      status_app_msg.order  = app['order']
-      status_app_msg.msg_str = app['msg']
+      try:
+        status_app_msg.pkg_name = app['APP_DICT']['pkg_name']
+        status_app_msg.pkg_name = app['APP_DICT']['group_name']
+        status_app_msg.description = app['APP_DICT']['description']
+        status_app_msg.node_name = app['APP_DICT']['node_name']
+        status_app_msg.app_file = app['APP_DICT']['app_file']
+        status_app_msg.app_path = app['APP_DICT']['app_path']   
+        status_app_msg.rui_files_list = app['RUI_DICT']['rui_files']
+        status_app_msg.rui_main_file = app['RUI_DICT']['rui_main_file']
+        status_app_msg.rui_main_class = app['RUI_DICT']['rui_main_class']  
+        status_app_msg.rui_menu_name = app['RUI_DICT']['rui_menu_name']
+        status_app_msg.active_state  = app['active']
+        status_app_msg.order  = app['order']
+        status_app_msg.msg_str = app['msg']
+      except Exception as e:
+        nepi_msg.publishMsgInfo(self,"Failed to create app status message: " + str(e))
     return status_app_msg
         
   # ln = sys._getframe().f_lineno ; 
@@ -204,10 +207,15 @@ class NepiAppsMgr(object):
   def getAppsStatusMsg(self):
     apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     self.apps_ordered_list = nepi_apps.getAppsOrderedList(apps_dict)
+    self.apps_group_list = nepi_apps.getAppsGroupList(apps_dict)
     self.apps_active_list = nepi_apps.getAppsActiveOrderedList(apps_dict)
     status_apps_msg = AppsStatus()
     status_apps_msg.apps_path = self.apps_folder
     status_apps_msg.apps_ordered_list = self.apps_ordered_list
+    apps_group_list = []
+    for app_name in self.apps_ordered_list:
+      apps_group_list.append(apps_dict[app_name]['APP_DICT']['group_name'])
+    status_apps_msg.apps_group_list = apps_group_list
     status_apps_msg.apps_active_list = self.apps_active_list
     status_apps_msg.apps_install_path = self.apps_install_folder
     status_apps_msg.apps_install_list = self.apps_install_files
@@ -231,20 +239,23 @@ class NepiAppsMgr(object):
     status_app_msg.name = app_name
     if app_name in apps_dict.keys() and app_name != 'NONE':
       app = apps_dict[app_name]
+      try:
+        status_app_msg.pkg_name = app['APP_DICT']['pkg_name']
+        status_app_msg.pkg_name = app['APP_DICT']['group_name']
+        status_app_msg.description = app['APP_DICT']['description']
+        status_app_msg.node_name = app['APP_DICT']['node_name']
+        status_app_msg.app_file = app['APP_DICT']['app_file']
+        status_app_msg.app_path = app['APP_DICT']['app_path']   
+        status_app_msg.rui_files_list = app['RUI_DICT']['rui_files']
+        status_app_msg.rui_main_file = app['RUI_DICT']['rui_main_file']
+        status_app_msg.rui_main_class = app['RUI_DICT']['rui_main_class']  
+        status_app_msg.rui_menu_name = app['RUI_DICT']['rui_menu_name']
+        status_app_msg.active_state  = app['active']
+        status_app_msg.order  = app['order']
+        status_app_msg.msg_str = app['msg']
+      except Exception as e:
+        nepi_msg.publishMsgInfo(self,"Failed to create app status message: " + str(e))
 
-      status_app_msg.pkg_name = app['APP_DICT']['pkg_name']
-      status_app_msg.description = app['APP_DICT']['description']
-      status_app_msg.node_name = app['APP_DICT']['node_name']
-      status_app_msg.app_file = app['APP_DICT']['app_file']
-      status_app_msg.app_path = app['APP_DICT']['app_path']   
-      status_app_msg.rui_files_list = app['RUI_DICT']['rui_files']
-      status_app_msg.rui_main_file = app['RUI_DICT']['rui_main_file']
-      status_app_msg.rui_main_class = app['RUI_DICT']['rui_main_class']  
-      status_app_msg.rui_menu_name = app['RUI_DICT']['rui_menu_name']
-
-      status_app_msg.active_state  = app['active']
-      status_app_msg.order  = app['order']
-      status_app_msg.msg_str = app['msg']
     return status_app_msg
 
   

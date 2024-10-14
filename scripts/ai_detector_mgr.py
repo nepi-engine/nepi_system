@@ -13,11 +13,14 @@ import numpy as np
 import cv2
 
 from nepi_edge_sdk_base import nepi_ros
+from nepi_edge_sdk_base import nepi_save
 from nepi_edge_sdk_base import nepi_ais
 from nepi_edge_sdk_base import nepi_msg 
+from nepi_edge_sdk_base import nepi_img
 
 
 from std_msgs.msg import Empty, Float32
+from sensor_msgs.msg import Image
 from rospy.numpy_msg import numpy_msg
 from cv_bridge import CvBridge
 from nepi_ros_interfaces.msg import UpdateState, AiFrameworksStatus
@@ -27,7 +30,7 @@ from nepi_ros_interfaces.msg import BoundingBoxes, ObjectCount,ClassifierSelecti
 
 
 from nepi_edge_sdk_base.save_cfg_if import SaveCfgIF
-
+from nepi_edge_sdk_base.save_data_if import SaveDataIF
 
 
 class AIDetectorManager:
@@ -40,6 +43,8 @@ class AIDetectorManager:
     MAX_THRESHOLD = 1.0
     FIXED_LOADING_START_UP_TIME_S = 5.0 # Total guess
     ESTIMATED_WEIGHT_LOAD_RATE_BYTES_PER_SECOND = 16000000.0 # Very roughly empirical based on YOLOv3
+
+    data_products = ['bounding_boxes','detection_image']
 
     init_ais_dict = dict()
     init_models_dict = dict()
@@ -76,7 +81,13 @@ class AIDetectorManager:
         self.models_dict = dict()
         self.class_dict = dict()
         self.classifier_load_start_time = nepi_ros.time_now()
-        # Find AI Frameworks
+
+        # Create a message image to publish when not running
+        message = "DETECTOR_NOT_RUNNING"
+        cv2_img = nepi_img.create_message_image(message)
+        self.ros_message_img = nepi_img.cv2img_to_rosimg(cv2_img) 
+
+         ## Find AI Frameworks
         # Get ai framework dict form param server and update
         ais_dict = nepi_ais.getAIsDict(self.AI_IF_FOLDER_PATH)
         #nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
@@ -141,7 +152,14 @@ class AIDetectorManager:
         nepi_ros.set_param(self,'~models_dict', self.init_models_dict)
         #nepi_msg.publishMsgWarn(self,"Storing classifier dict in param server: " + str(self.init_models_dict))
        
-        
+        # Set up save data and save config services ########################################################
+        factory_data_rates= {}
+        for d in self.data_products:
+            factory_data_rates[d] = [0.0, 0.0, 100.0] # Default to 0Hz save rate, set last save = 0.0, max rate = 100.0Hz
+        if 'detection_image' in self.data_products:
+            factory_data_rates['detection_image'] = [1.0, 0.0, 100.0] 
+        self.save_data_if = SaveDataIF(data_product_names = self.data_products, factory_data_rate_dict = factory_data_rates)
+        self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.setCurrentSettingsAsDefault, paramsModifiedCallback=self.updateFromParamServer)
 
         # Setup Node Services
         rospy.Service('~img_classifier_list_query', ImageClassifierListQuery, self.provideClassifierList)
@@ -155,11 +173,20 @@ class AIDetectorManager:
         #mgr_reset_sub = rospy.Subscriber('~factory_reset', Empty, self.resetMgrCb, queue_size = 10)
         #mgr_reset_sub = rospy.Subscriber('~refresh_ais', Empty, self.refreshCb, queue_size = 10)
 
+        self.pub_sub_namespace = self.base_namespace + self.node_name
+        SOURCE_IMAGE_TOPIC = self.pub_sub_namespace + "/source_image"
+        self.source_image_pub = rospy.Publisher(SOURCE_IMAGE_TOPIC, Image, queue_size=1, latch=True)
+        DETECTION_IMAGE_TOPIC = self.pub_sub_namespace + "/detection_image"
+        self.detection_image_pub = rospy.Publisher(DETECTION_IMAGE_TOPIC, Image,queue_size=1, latch=True)
+        rospy.Subscriber(DETECTION_IMAGE_TOPIC, Image, self.detectionImageCb, queue_size = 1)
+        BOUNDING_BOXES_TOPIC = self.pub_sub_namespace + "/bounding_boxes"
+        rospy.Subscriber(BOUNDING_BOXES_TOPIC, BoundingBoxes, self.boundingBoxesCb, queue_size = 1)
+        time.sleep(1)
 
         # Framework Management Scubscirbers
-        rospy.Subscriber('~enable_all_frameworks', Empty, self.enableAllFwsCb, queue_size = 10)
-        rospy.Subscriber('~disable_all_frameworks', Empty, self.disableAllFwsCb, queue_size = 10)
-        rospy.Subscriber('~update_framework_state', UpdateState, self.updateFwStateCb)
+        rospy.Subscriber('~enable_all_ais', Empty, self.enableAllFwsCb, queue_size = 10)
+        rospy.Subscriber('~disable_all_ais', Empty, self.disableAllFwsCb, queue_size = 10)
+        rospy.Subscriber('~update_ais_state', UpdateState, self.updateFwStateCb)
         #Model Management Scubscirbers
         rospy.Subscriber('~enable_all_models', Empty, self.enableAllModelsCb, queue_size = 10)
         rospy.Subscriber('~disable_all_models', Empty, self.disableAllModelsCb, queue_size = 10)
@@ -167,12 +194,14 @@ class AIDetectorManager:
         # Create status pub
         self.apps_status_pub = rospy.Publisher("~status", AiFrameworksStatus, queue_size=1, latch=True)
 
-        # Setup config IF system
-        self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.setCurrentSettingsAsDefault, paramsModifiedCallback=self.updateFromParamServer)
+
 
         # Load default params
         self.updateFromParamServer()
         self.saveEnabledSettings() # Save config
+        self.ros_message_img.header.stamp = nepi_ros.time_now()
+        self.source_image_pub.publish(self.ros_message_img)
+        self.detection_image_pub.publish(self.ros_message_img)
         self.publish_status()
         #########################################################
         ## Initiation Complete
@@ -180,6 +209,19 @@ class AIDetectorManager:
         # Spin forever (until object is detected)
         nepi_ros.spin()
         #########################################################
+
+    def detectionImageCb(self,img_in_msg):
+        data_product = 'detection_image'
+        ros_timestamp = img_in_msg.header.stamp
+        nepi_save.save_ros_img2file(self,data_product,img_in_msg,ros_timestamp)
+
+
+    def boundingBoxesCb(self,bb_msg):
+        data_product = 'bounding_boxes'
+        ros_timestamp = bb_msg.header.stamp
+        nepi_save.save_data2file(self,data_product,bb_msg,ros_timestamp)
+
+
 
     def publish_status(self):
         ais_dict = nepi_ros.get_param(self,"~ais_dict",self.init_ais_dict)
@@ -269,6 +311,10 @@ class AIDetectorManager:
                 self.update_state_sub.unregister()
             self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
             self.current_threshold = None
+            time.sleep(1)
+            self.ros_message_img.header.stamp = nepi_ros.time_now()
+            self.source_image_pub.publish(self.ros_message_img)
+            self.detection_image_pub.publish(self.ros_message_img)
 
     def setThresholdCb(self, msg):
         # All we do here is update the current_threshold so that it is up-to-date in status responses
@@ -385,7 +431,10 @@ class AIDetectorManager:
                         loading_progress = .95
                     else:
                         loading_progress = loading_elapsed_s / estimated_load_time_s
-
+        if (self.classifier_state != ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING):
+            self.ros_message_img.header.stamp = nepi_ros.time_now()
+            self.detection_image_pub.publish(self.ros_message_img)
+            self.source_image_pub.publish(self.ros_message_img)
 
         # Look for Depth Map
         if self.current_img_topic != "None":

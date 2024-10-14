@@ -402,7 +402,7 @@ void NavPoseMgr::imuHandler(const sensor_msgs::Imu::ConstPtr &msg)
 	// Reset odometry -- we'll fill in just those fields that we can glean from IMU message
 	latest_odometry = nav_msgs::Odometry();
 	latest_odometry.header = msg->header;
-	latest_odometry.header.frame_id = header.frame_id; // TODO: Configurable?
+	latest_odometry.header.frame_id = msg->header.frame_id; // TODO: Configurable?
 	latest_odometry.child_frame_id = msg->header.frame_id; 
 	latest_odometry.pose.pose.orientation = msg->orientation;
 
