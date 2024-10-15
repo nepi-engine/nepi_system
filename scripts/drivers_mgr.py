@@ -461,9 +461,9 @@ class NepiDriversMgr(object):
       #nepi_drv.printDict(drvs_dict)
       if 'NoneDict' not in drvs_dict.keys():
         drvs_dict = nepi_drv.updateDriversDict(self.drivers_folder,drvs_dict)
-        nepi_msg.publishMsgWarn(self,"Got drvs_dict values from param server")
+        nepi_msg.publishMsgInfo(self,"Got drvs_dict values from param server")
       else:
-        nepi_msg.publishMsgWarn(self,"No saved drvs_dict in config, creating a a new database")
+        nepi_msg.publishMsgInfo(self,"No saved drvs_dict in config, creating a a new database")
         drvs_dict = nepi_drv.getDriversDict(self.drivers_folder)
         drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
         active_list = nepi_ros.get_param(self,"~active_list",self.init_active_list)
