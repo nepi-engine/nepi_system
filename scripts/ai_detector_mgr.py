@@ -41,8 +41,6 @@ class AIDetectorManager:
     
     MIN_THRESHOLD = 0.001
     MAX_THRESHOLD = 1.0
-    FIXED_LOADING_START_UP_TIME_S = 5.0 # Total guess
-    ESTIMATED_WEIGHT_LOAD_RATE_BYTES_PER_SECOND = 16000000.0 # Very roughly empirical based on YOLOv3
 
     data_products = ['bounding_boxes','detection_image']
 
@@ -236,11 +234,13 @@ class AIDetectorManager:
 
 
     def startClassifierCb(self, classifier_selection_msg):
-        nepi_msg.publishMsgWarn(self,"Got start classifier msg: " + str(classifier_selection_msg))
+        nepi_msg.publishMsgInfo(self,"Got start classifier msg: " + str(classifier_selection_msg))
         classifier_name=classifier_selection_msg.classifier
         source_img_topic=classifier_selection_msg.img_topic
         threshold=classifier_selection_msg.detection_threshold
-        self.startClassifier(classifier_name, source_img_topic, threshold)
+        if classifier_name != 'None':
+            self.startClassifier(classifier_name, source_img_topic, threshold)
+
 
 
     def startClassifier(self, classifier_name, source_img_topic, threshold):
@@ -283,7 +283,7 @@ class AIDetectorManager:
         classifier_class = self.class_dict[classifier_name]
         self.classifier_class = classifier_class
         self.classifier_load_start_time = nepi_ros.time_now()
-        nepi_msg.publishMsgWarn(self,"Starting classifier " + classifier_name + " with classifier " + classifier)
+        nepi_msg.publishMsgInfo(self,"Starting classifier " + classifier_name + " with classifier " + classifier + " with image " + self.current_img_topic)
         self.classifier_class.startClassifier(classifier=classifier, source_img_topic=self.current_img_topic, threshold=self.current_threshold)
         if self.found_object_sub is not None:
             self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
@@ -310,7 +310,7 @@ class AIDetectorManager:
             if not (None == self.update_state_sub):
                 self.update_state_sub.unregister()
             self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
-            self.current_threshold = None
+            #self.current_threshold = None
             time.sleep(1)
             self.ros_message_img.header.stamp = nepi_ros.time_now()
             self.source_image_pub.publish(self.ros_message_img)
@@ -426,7 +426,7 @@ class AIDetectorManager:
                     loading_progress = 1.0
                 elif (self.classifier_state == ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING):
                     loading_elapsed_s = (nepi_ros.time_now() - self.classifier_load_start_time).to_sec()
-                    estimated_load_time_s = self.FIXED_LOADING_START_UP_TIME_S + (models_dict[self.current_classifier]['size'] / self.ESTIMATED_WEIGHT_LOAD_RATE_BYTES_PER_SECOND)
+                    estimated_load_time_s = models_dict[self.current_classifier]['load_time'] 
                     if loading_elapsed_s > estimated_load_time_s:
                         loading_progress = .95
                     else:
