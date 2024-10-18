@@ -209,9 +209,10 @@ class AIDetectorManager:
         #########################################################
 
     def detectionImageCb(self,img_in_msg):
-        data_product = 'detection_image'
-        ros_timestamp = img_in_msg.header.stamp
-        nepi_save.save_ros_img2file(self,data_product,img_in_msg,ros_timestamp)
+        if self.classifier_state == "Running":
+            data_product = 'detection_image'
+            ros_timestamp = img_in_msg.header.stamp
+            nepi_save.save_ros_img2file(self,data_product,img_in_msg,ros_timestamp)
 
 
     def boundingBoxesCb(self,bb_msg):

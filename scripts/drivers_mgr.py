@@ -469,7 +469,6 @@ class NepiDriversMgr(object):
         active_list = nepi_ros.get_param(self,"~active_list",self.init_active_list)
         #nepi_msg.publishMsgWarn(self,"Got factory active drivers list: " + str(active_list))
         if 'ALL' in active_list:
-          #nepi_msg.publishMsgWarn(self,"No saved config, setting all drivers active")
           drvs_dict = nepi_drv.activateAllDrivers(drvs_dict)
         else:  
           drvs_dict = nepi_drv.initDriversActive(active_list,drvs_dict)

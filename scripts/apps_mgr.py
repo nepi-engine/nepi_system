@@ -420,7 +420,6 @@ class NepiAppsMgr(object):
         apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
         active_list = nepi_ros.get_param(self,"~active_list",self.init_active_list)
         if "ALL" in active_list:
-          nepi_msg.publishMsgWarn(self,"No saved config, setting all drivers active")
           apps_dict = nepi_apps.activateAllApps(apps_dict)
         else:
           apps_dict = nepi_apps.initAppsActiveOrder(active_list,apps_dict)
