@@ -68,10 +68,13 @@ class config_mgr(object):
 
         rospy.Subscriber('save_config', Empty, self.save_non_ros_cfgs) # Global one only
         rospy.Subscriber('store_params', String, self.store_params)
-        rospy.Subscriber('full_user_restore', Empty, self.restore_user_cfgs)
+        rospy.Subscriber('full_user_restore', Empty, self.restore_user_cfgs_mgr)
 
         rospy.Service('factory_reset', FileReset, self.factory_reset)
         rospy.Service('user_reset', FileReset, self.user_reset)
+
+        # Restore user configurations
+        #self.restore_user_cfgs()
 
         #########################################################
         ## Initiation Complete
@@ -182,7 +185,10 @@ class config_mgr(object):
             target = os.path.join(USER_CFG_PATH, 'sys', cfg)
             os.system('cp -rf ' + source + ' ' + target)
 
-    def restore_user_cfgs(self,msg):
+    def restore_user_cfgs_mgr(self,msg):
+        self.restore_user_cfgs()
+
+    def restore_user_cfgs(self):
         # First handle the NEPI-ROS user configs.
         for root, dirs, files in os.walk(CFG_PATH):
             for name in files:
