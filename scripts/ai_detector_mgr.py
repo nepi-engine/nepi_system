@@ -462,7 +462,7 @@ class AIDetectorManager:
             pointcloud_topic = "None"
             self.has_pointcloud = False
 
-        return [self.current_img_topic, self.current_classifier, str(self.current_classifier_classes), \
+        return [self.current_img_topic, self.current_classifier, self.current_classifier_classes, \
                 self.classifier_state, loading_progress, self.current_threshold, \
                 self.has_depth_map,self.depth_map_topic,self.has_pointcloud,self.pointcloud_topic]
 
