@@ -215,10 +215,27 @@ class AIDetectorManager:
             nepi_save.save_ros_img2file(self,data_product,img_in_msg,ros_timestamp)
 
 
-    def boundingBoxesCb(self,bb_msg):
+    def boundingBoxesCb(self,bbs_msg):
         data_product = 'bounding_boxes'
-        ros_timestamp = bb_msg.header.stamp
-        nepi_save.save_data2file(self,data_product,bb_msg,ros_timestamp)
+        ros_timestamp = bbs_msg.header.stamp
+        bbs_dict = dict()
+        bbs_dict['header'] =  bbs_msg.header
+        bbs_dict['image_header'] = bbs_msg.image_header
+        bbs_dict['image_topic'] = bbs_msg.image_topic
+        bb_list = []
+        for ind, bb_msg in enumerate(bbs_msg):
+            bb_dict = dict()
+            bb_dict['class'] = bb_msg.Class
+            bb_dict['id'] = bb_msg.id
+            bb_dict['uid'] = bb_msg.uid
+            bb_dict['probability'] = bb_msg.probability
+            bb_dict['xmin'] = bb_msg.xmin
+            bb_dict['ymin'] = bb_msg.ymin
+            bb_dict['xmax'] = bb_msg.xmax
+            bb_dict['ymax'] = bb_msg.ymax
+            bb_list.append(bb_dict)
+        bbs_dict['bounding_boxes'] = bb_list
+        nepi_save.save_dict2file(self,data_product,bbs_dict,ros_timestamp)
 
 
 
