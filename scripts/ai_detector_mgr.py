@@ -41,6 +41,7 @@ class AIDetectorManager:
     
     MIN_THRESHOLD = 0.001
     MAX_THRESHOLD = 1.0
+    
 
     data_products = ['bounding_boxes','detection_image']
 
@@ -221,6 +222,9 @@ class AIDetectorManager:
         bbs_dict = dict()
         bbs_dict['timestamp'] =  nepi_ros.get_datetime_str_from_stamp(bbs_msg.header.stamp)
         bbs_dict['image_topic'] = bbs_msg.image_topic
+        bbs_dict['image_height'] = bbs_msg.image_height
+        bbs_dict['image_width'] = bbs_msg.image_width
+
         bb_list = []
         for ind, bb_msg in enumerate(bbs_msg.bounding_boxes):
             bb_dict = dict()
@@ -232,6 +236,8 @@ class AIDetectorManager:
             bb_dict['ymin'] = bb_msg.ymin
             bb_dict['xmax'] = bb_msg.xmax
             bb_dict['ymax'] = bb_msg.ymax
+            bb_dict['area_pixels'] = bb_msg.area_pixels
+            bb_dict['area_ratio'] = bb_msg.area_ratio
             bb_list.append(bb_dict)
         bbs_dict['bounding_boxes'] = bb_list
         nepi_save.save_dict2file(self,data_product,bbs_dict,ros_timestamp)

@@ -155,7 +155,7 @@ class AutomationManager:
             del self.script_configs[script_name]
 
     def update_script_configs(self):
-        nepi_msg.publishMsgWarn(self,"Ready to run update_script_configs!!!")
+        #nepi_msg.publishMsgWarn(self,"Ready to run update_script_configs!!!")
         script_configs = {} # Dictionary of dictionaries
         try:
             script_configs = nepi_ros.get_param(self,'~script_configs')

@@ -74,7 +74,7 @@ class config_mgr(object):
         rospy.Service('user_reset', FileReset, self.user_reset)
 
         # Restore user configurations
-        #self.restore_user_cfgs()
+        self.restore_user_cfgs()
 
         #########################################################
         ## Initiation Complete
