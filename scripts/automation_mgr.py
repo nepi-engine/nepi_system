@@ -240,13 +240,19 @@ class AutomationManager:
         
         #Update the scripts list
         self.scripts = self.get_scripts()
-
         if file_deleted is False:
             # Update the script config here to set up the new/modified script
             self.setupScriptConfigs(single_script=script_name)
 
             # Update the file size in case it changed
-            self.file_sizes[script_name] = os.path.getsize(file_path)
+            if os.path.exists(file_path):
+                try:
+                    f_size = os.path.getsize(file_path)
+                except:
+                    f_size = 0
+            else:
+                f_size = 0
+            self.file_sizes[script_name] = f_size
 
             # Reset the script counters entry for this file... consider this a new script
             self.script_counters[script_name] = {'started': 0, 'completed': 0, 'stopped_manually': 0, 'errored_out': 0, 'cumulative_run_time': 0.0}

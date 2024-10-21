@@ -219,11 +219,10 @@ class AIDetectorManager:
         data_product = 'bounding_boxes'
         ros_timestamp = bbs_msg.header.stamp
         bbs_dict = dict()
-        bbs_dict['header'] =  bbs_msg.header
-        bbs_dict['image_header'] = bbs_msg.image_header
+        bbs_dict['timestamp'] =  nepi_ros.get_datetime_str_from_stamp(bbs_msg.header.stamp)
         bbs_dict['image_topic'] = bbs_msg.image_topic
         bb_list = []
-        for ind, bb_msg in enumerate(bbs_msg):
+        for ind, bb_msg in enumerate(bbs_msg.bounding_boxes):
             bb_dict = dict()
             bb_dict['class'] = bb_msg.Class
             bb_dict['id'] = bb_msg.id

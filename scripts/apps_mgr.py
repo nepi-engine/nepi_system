@@ -44,7 +44,8 @@ APPS_CONFIG_FALLBACK_FOLDER = '/opt/nepi/ros/etc'
 
 class NepiAppsMgr(object):
 
-  APP_UPDATE_CHECK_INTERVAL = 5
+  UPDATE_CHECK_INTERVAL = 5
+  PUBLISH_STATUS_INTERVAL = 1
   save_cfg_if = None
   apps_folder = ''
   apps_files = []
@@ -135,6 +136,7 @@ class NepiAppsMgr(object):
 
     # Setup a app folder timed check
     nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
+    nepi_ros.timer(nepi_ros.duration(self.PUBLISH_STATUS_INTERVAL), self.publishStatusCb, oneshot=True)
     time.sleep(1)
     ## Publish Status
     self.publish_status()
@@ -441,6 +443,9 @@ class NepiAppsMgr(object):
           self.updateFromParamServer()
           self.publish_status()
 
+  def publishStatusCb(self,timer):
+    self.publish_status()
+
 
   def checkAndUpdateCb(self,_):
     ###############################
@@ -518,7 +523,7 @@ class NepiAppsMgr(object):
     # Publish Status
     self.publish_status()
     # And now that we are finished, start a timer for the appt runDiscovery()
-    nepi_ros.sleep(self.APP_UPDATE_CHECK_INTERVAL,100)
+    nepi_ros.sleep(self.UPDATE_CHECK_INTERVAL,100)
     nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
    
   

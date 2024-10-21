@@ -43,7 +43,8 @@ DRIVERS_INSTALL_FALLBACK_FOLDER = '/mnt/nepi_storage/nepi_src/nepi_drivers'
 
 class NepiDriversMgr(object):
 
-  DRIVER_UPDATE_CHECK_INTERVAL = 5
+  UPDATE_CHECK_INTERVAL = 5
+  PUBLISH_STATUS_INTERVAL = 1
   save_cfg_if = None
   drivers_folder = ''
   drivers_files = []
@@ -150,6 +151,7 @@ class NepiDriversMgr(object):
 
     # Setup a driver folder timed check
     nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
+    nepi_ros.timer(nepi_ros.duration(self.PUBLISH_STATUS_INTERVAL), self.publishStatusCb, oneshot=True)
     time.sleep(1)
     ## Publish Status
     self.publish_status()
@@ -490,6 +492,9 @@ class NepiDriversMgr(object):
           self.updateFromParamServer()
           self.publish_status()
 
+  def publishStatusCb(self,timer):
+    self.publish_status()
+
   def checkAndUpdateCb(self,_):
     ###############################
     ## First update Database
@@ -611,7 +616,7 @@ class NepiDriversMgr(object):
     # Publish Status
     self.publish_status()
     # And now that we are finished, start a timer for the drvt runDiscovery()
-    nepi_ros.sleep(self.DRIVER_UPDATE_CHECK_INTERVAL,100)
+    nepi_ros.sleep(self.UPDATE_CHECK_INTERVAL,100)
     nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
    
   
