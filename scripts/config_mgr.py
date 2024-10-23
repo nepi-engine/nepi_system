@@ -91,15 +91,7 @@ class config_mgr(object):
         link_dirname = os.path.dirname(link_name)
         if not os.path.exists(link_dirname):
             nepi_msg.publishMsgWarn(self,"Skipping symlink for " + link_name + " because path does not exist... missing factory config?")
-            return False
-        try:
-            os.symlink(target, link_name)
-        except OSError as e:
-            if e.errno == errno.EEXIST:
-                os.remove(link_name)
-                os.symlink(target, link_name)
-            else:
-                return False
+            return FalsepublishJointStateAndStatus
         return True
 
     def separate_node_name_in_msg(self,qualified_node_name):
@@ -199,6 +191,8 @@ class config_mgr(object):
                         link_name = os.path.join(root, name.replace(FACTORY_SUFFIX, ''))
                         nepi_msg.publishMsgInfo(self,"Updating " + link_name + " to user config")
                         self.symlink_force(user_cfg_name, link_name)
+                    else:
+                    	nepi_msg.publishMsgInfo(self,"User config file does not exist at " + user_cfg_name)
 
         # Now handle non-ROS user system configs.        
         for name in SYS_CFGS_TO_PRESERVE:
@@ -207,7 +201,7 @@ class config_mgr(object):
                 if os.path.isdir(full_name):
                     full_name = os.path.join(full_name,'*') # Wildcard avoids copying source folder into target folder as a subdirectory
                 target = SYS_CFGS_TO_PRESERVE[name]
-                nepi_msg.publishMsgInfo(self,"Updating " + target + " from user config")
+                nepi_msg.publishMsgInfo(self,"Upettings_capabilities_query:1672] call_service InvalidServiceException: Service /nedating " + target + " from user config")
                 os.system('cp -rf ' + full_name + ' ' + target)
                 os.system('chown -R nepi:nepi ' + target)
 

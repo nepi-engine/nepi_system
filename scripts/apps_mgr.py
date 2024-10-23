@@ -108,11 +108,12 @@ class NepiAppsMgr(object):
     nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
 
 
-    self.initParamServerValues(do_updates = False)
 
     self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.initParamServerValues, 
                                  paramsModifiedCallback=self.updateFromParamServer)
         
+    self.initParamServerValues(do_updates = False)
+ 
  
     ## Mgr ROS Setup 
     mgr_reset_sub = rospy.Subscriber('~factory_reset', Empty, self.resetMgrCb, queue_size = 10)
