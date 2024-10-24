@@ -191,8 +191,10 @@ class AIDetectorManager:
         rospy.Subscriber('~disable_all_models', Empty, self.disableAllModelsCb, queue_size = 10)
         rospy.Subscriber('~update_model_state', UpdateState, self.updateModelStateCb)
         # Create status pub
-        self.apps_status_pub = rospy.Publisher("~status", AiFrameworksStatus, queue_size=1, latch=True)
 
+        self.aif_status_pub = rospy.Publisher("~status", AiFrameworksStatus, queue_size=1, latch=True)
+        time.sleep(1)
+        rospy.Timer(rospy.Duration(0.5), self.statusPublishCb)
 
 
         # Load default params
@@ -243,6 +245,9 @@ class AIDetectorManager:
         nepi_save.save_dict2file(self,data_product,bbs_dict,ros_timestamp)
 
 
+    def statusPublishCb(self,timer):
+        self.publish_status()
+
 
     def publish_status(self):
         ais_dict = nepi_ros.get_param(self,"~ais_dict",self.init_ais_dict)
@@ -253,7 +258,7 @@ class AIDetectorManager:
         status_msg.ai_models = nepi_ais.getModelsSortedList(models_dict)
         status_msg.active_ai_models = nepi_ais.getModelsActiveSortedList(models_dict)
         if not nepi_ros.is_shutdown():
-            self.apps_status_pub.publish(status_msg)
+            self.aif_status_pub.publish(status_msg)
 
 
     def startClassifierCb(self, classifier_selection_msg):

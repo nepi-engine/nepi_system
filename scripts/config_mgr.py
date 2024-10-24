@@ -140,7 +140,7 @@ class config_mgr(object):
     def user_reset(self,req):
         qualified_node_name = req.node_name
         cfg_pathname = self.get_cfg_pathname(qualified_node_name)
-
+        nepi_msg.publishMsgWarn(self,"User reseting params for node_name: " + qualified_node_name)
         # Now update the param server
         return self.update_from_file(cfg_pathname, qualified_node_name)
 
@@ -192,7 +192,7 @@ class config_mgr(object):
                         nepi_msg.publishMsgInfo(self,"Updating " + link_name + " to user config")
                         self.symlink_force(user_cfg_name, link_name)
                     else:
-                    	nepi_msg.publishMsgInfo(self,"User config file does not exist at " + user_cfg_name)
+                    	nepi_msg.publishMsgWarn(self,"User config file does not exist at " + user_cfg_name)
 
         # Now handle non-ROS user system configs.        
         for name in SYS_CFGS_TO_PRESERVE:

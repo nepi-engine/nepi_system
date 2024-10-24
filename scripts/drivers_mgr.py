@@ -79,15 +79,22 @@ class NepiDriversMgr(object):
     nepi_msg.createMsgPublishers(self)
     nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
     ##############################
-    self.init_active_list = nepi_ros.get_param(self,"~active_list",[])
-    nepi_ros.set_param(self,"~active_list",self.init_active_list)
-    #nepi_msg.publishMsgWarn(self,"Got init factory active drivers list: " + str(self.init_active_list))
-    # Get driver folder paths
+        # Get driver folder paths
     self.drivers_folder = DRIVERS_FALLBACK_FOLDER
     #nepi_msg.publishMsgInfo(self,"Driver folder set to " + self.drivers_folder)
     self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
     #nepi_msg.publishMsgInfo(self,"Driver folder files " + str(self.drivers_files))
     # Get Install Drivers Folder
+
+    self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.initParamServerValues, 
+                                 paramsModifiedCallback=self.updateFromParamServer)
+    self.save_cfg_if.userReset()
+    self.initParamServerValues(do_updates = True)
+    
+    self.init_active_list = nepi_ros.get_param(self,"~active_list",[])
+    nepi_ros.set_param(self,"~active_list",self.init_active_list)
+    #nepi_msg.publishMsgWarn(self,"Got init factory active drivers list: " + str(self.init_active_list))
+
 
     self.base_namespace = nepi_ros.get_base_namespace()
     get_folder_name_service = self.base_namespace + 'system_storage_folder_query'
@@ -117,14 +124,14 @@ class NepiDriversMgr(object):
     self.drivers_status_pub = rospy.Publisher("~status", DriversStatus, queue_size=1, latch=True)
     self.driver_status_pub = rospy.Publisher("~status_driver", DriverStatus, queue_size=1, latch=True)
 
+    time.sleep(1)
+    rospy.Timer(rospy.Duration(0.5), self.statusPublishCb)
+
     # Setup message publisher and init param server
     nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
 
 
-    self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.initParamServerValues, 
-                                 paramsModifiedCallback=self.updateFromParamServer)
 
-    self.initParamServerValues(do_updates = False)
         
  
     ## Mgr ROS Setup 
@@ -215,6 +222,9 @@ class NepiDriversMgr(object):
     self.publish_driver_status()
 
 
+  def statusPublishCb(self,timer):
+      self.publish_drivers_status()
+
   def publish_drivers_status(self):
     self.last_status_drivers_msg = self.status_drivers_msg
     self.status_drivers_msg = self.getDriversStatusMsg()
@@ -272,7 +282,6 @@ class NepiDriversMgr(object):
     return status_driver_msg
 
   
-
   ###################
   ## Drivers Mgr Callbacks
   def enableAllCb(self,msg):
@@ -423,6 +432,7 @@ class NepiDriversMgr(object):
     drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
     drvs_dict = activateAllDrivers(drvs_dict)
     nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
+    self.resetParamServer()
     self.publish_status()
 
 
@@ -444,6 +454,7 @@ class NepiDriversMgr(object):
   def setCurrentAsDefault(self):
     nepi_ros.set_param(self,"~backup_enabled", True)
     self.initParamServerValues(do_updates = False)
+    self.publish_status()
 
   def updateFromParamServer(self):
     #nepi_msg.publishMsgWarn(self,"Debugging: param_dict = " + str(param_dict))
@@ -468,7 +479,7 @@ class NepiDriversMgr(object):
         nepi_msg.publishMsgInfo(self,"No saved drvs_dict in config, creating a a new database")
         drvs_dict = nepi_drv.getDriversDict(self.drivers_folder)
         drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
-        active_list = nepi_ros.get_param(self,"~active_list",self.init_active_list)
+        active_list = nepi_ros.get_param(self,"~active_list", [])
         #nepi_msg.publishMsgWarn(self,"Got factory active drivers list: " + str(active_list))
         if 'ALL' in active_list:
           drvs_dict = nepi_drv.activateAllDrivers(drvs_dict)
@@ -476,21 +487,22 @@ class NepiDriversMgr(object):
           drvs_dict = nepi_drv.initDriversActive(active_list,drvs_dict)
       #nepi_drv.printDict(drvs_dict)
       self.init_drvs_dict = drvs_dict
-      nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
       self.drivers_ordered_list = nepi_drv.getDriversOrderedList(drvs_dict)
       self.drivers_active_list = nepi_drv.getDriversActiveOrderedList(drvs_dict)
       self.init_active_list = self.drivers_active_list
-      nepi_ros.set_param(self,"~active_list",self.init_active_list)
+
       #nepi_drv.printDict(drvs_dict)
       self.resetParamServer(do_updates)
       #nepi_drv.printDict(drvs_dict)
 
   def resetParamServer(self,do_updates = True):
+      nepi_ros.set_param(self,"~drvs_dict",self.init_drvs_dict)
+      nepi_ros.set_param(self,"~active_list",self.init_active_list)
       nepi_ros.set_param(self,"~backup_enabled",self.init_backup_enabled)
       nepi_ros.set_param(self,"~drvs_dict",self.init_drvs_dict)
       if do_updates:
           self.updateFromParamServer()
-          self.publish_status()
+
 
   def publishStatusCb(self,timer):
     self.publish_status()
@@ -534,6 +546,7 @@ class NepiDriversMgr(object):
     for drv_name in purge_list:
       if drv_name in self.discovery_active_dict.keys():
         del self.discovery_active_dict[drv_name]
+  
 
 
 
@@ -557,10 +570,10 @@ class NepiDriversMgr(object):
           #nepi_msg.publishMsgWarn(self,"Processing discovery process for driver %s with method %s and process %s",drv_name,discovery_method,discovery_process)
           # Check Auto-Node processes
           if discovery_method == 'AUTO' and discovery_process == "LAUNCH":
-            discovery_node_name = discovery_name.lower() + "_discovery"
+            discovery_node_name = os.path.join(discovery_name.lower(), "_discovery")
             if drv_name not in self.discovery_active_dict.keys():
               #Setup required param server drv_dict for discovery node
-              dict_param_name = discovery_node_name + "/drv_dict"
+              dict_param_name = os.path.join(discovery_node_name, "/drv_dict")
               nepi_ros.set_param(self,dict_param_name,drv_dict)
               #Try and launch node
               nepi_msg.publishMsgInfo(self,"")
