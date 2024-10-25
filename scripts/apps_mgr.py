@@ -77,14 +77,14 @@ class NepiAppsMgr(object):
     #nepi_msg.publishMsgInfo(self,"App folder files " + str(self.apps_files))
     # Get Install Apps Folder
 
-
     self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.initParamServerValues, 
                                  paramsModifiedCallback=self.updateFromParamServer)
 
     nepi_msg.publishMsgWarn(self,"Calling user reset: ")
 
     self.save_cfg_if.userReset()
-
+    time.sleep(1)
+    
     apps_dict = nepi_ros.get_param(self,"~apps_dict",dict())
     short_dict = dict()
     for app_name in apps_dict:
@@ -92,6 +92,11 @@ class NepiAppsMgr(object):
     nepi_msg.publishMsgWarn(self,"Got init apps dict: " + str(short_dict))
     
     self.initParamServerValues(do_updates = True)
+
+
+
+
+
 
     apps_dict = nepi_ros.get_param(self,"~apps_dict",dict())
     short_dict = dict()
