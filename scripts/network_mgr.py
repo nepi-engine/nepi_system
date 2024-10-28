@@ -599,8 +599,12 @@ class NetworkMgr:
             if self.wifi_scan_thread is not None:
                 self.wifi_scan_thread.join(1)
                 self.wifi_scan_thread = None
-
-            if (self.get_wifi_client_connected_ssid() is not None):
+            try:
+                wifi_client = self.get_wifi_client_connected_ssid()
+            except Exception as e:
+                nepi_msg.publishMsgWarn(self,"Failed to get info for WiFi network: " + str(e))
+                wifi_client = None
+            if ( wifi_client is not None):
                 nepi_msg.publishMsgWarn(self,"Failed to disconnect from WiFi network")
             else:
                 with self.available_wifi_networks_lock:
@@ -710,14 +714,13 @@ class NetworkMgr:
         try:
             scan_result = subprocess.check_output(network_scan_cmd, text=True)
         except Exception as e:
-            nepi_msg.publishMsgWarn(self,"Failed to scan for available WiFi networks: " + str(e))
+            nepi_msg.publishMsgInfo(self,"Failed to scan for available WiFi networks: " + str(e))
         for scan_line in scan_result.splitlines():
             if "SSID:" in scan_line:
                 network = scan_line.split(':')[1].strip()
                 # TODO: Need more checks to ensure this is a connectable network?
                 if network and (network not in available_networks):
                     available_networks.append(network)
-
         with self.available_wifi_networks_lock:
             self.available_wifi_networks = list(available_networks)
 

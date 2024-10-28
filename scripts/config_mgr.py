@@ -90,22 +90,32 @@ class config_mgr(object):
     def symlink_force(self,target, link_name):
         link_dirname = os.path.dirname(link_name)
         if not os.path.exists(link_dirname):
-            nepi_msg.publishMsgWarn(self,"Skipping symlink for " + link_name + " because path does not exist... missing factory config?")
-            return FalsepublishJointStateAndStatus
+            rospy.logwarn("Skipping symlink for " + link_name + " because path does not exist... missing factory config?")
+            return False
+        try:
+            os.symlink(target, link_name)
+        except OSError as e:
+            if e.errno == errno.EEXIST:
+                os.remove(link_name)
+                os.symlink(target, link_name)
+            else:
+                rospy.logerr("Unable to create symlink %s for %s: (%s)", link_name, target, str(e))
+                return False
         return True
 
     def separate_node_name_in_msg(self,qualified_node_name):
         return qualified_node_name.split("/")[-1]
 
     def update_from_file(self,file_pathname, namespace):
+        nepi_msg.publishMsgInfo(self,"Updating Params for namespace: " + namespace  + " from file " + file_pathname )
         try:
             paramlist = rosparam.load_file(file_pathname, namespace, verbose=True)
-            nepi_msg.publishMsgWarn(self,"Got Params for namespace: " + namespace  + " from file " + file_pathname  + " : " + str*(paramlist))
+            #nepi_msg.publishMsgWarn(self,"Got Params for namespace: " + namespace  + " from file " + file_pathname  + " : " + str(paramlist))
 
             for params, ns in paramlist:
                 rosparam.upload_params(ns, params, verbose=True)
-        except:
-            nepi_msg.publishMsgWarn(self,"Unable to load factory parameters from file " + file_pathname)
+        except Exception as e:
+            nepi_msg.publishMsgWarn(self,"Unable to load factory parameters from file " + file_pathname + " " + str(e))
             return [False]
 
         return [True]
@@ -142,7 +152,7 @@ class config_mgr(object):
     def user_reset(self,req):
         qualified_node_name = req.node_name
         cfg_pathname = self.get_cfg_pathname(qualified_node_name)
-        nepi_msg.publishMsgWarn(self,"User reseting params for node_name: " + qualified_node_name  + " from file " + cfg_pathname)
+        nepi_msg.publishMsgInfo(self,"User reseting params for node_name: " + qualified_node_name  + " from file " + cfg_pathname)
         # Now update the param server
         return self.update_from_file(cfg_pathname, qualified_node_name)
 
@@ -191,10 +201,10 @@ class config_mgr(object):
                     user_cfg_name = os.path.join(USER_CFG_PATH, 'ros', name + USER_SUFFIX)
                     if os.path.exists(user_cfg_name): # Restrict to those with present user configs
                         link_name = os.path.join(root, name.replace(FACTORY_SUFFIX, ''))
-                        nepi_msg.publishMsgInfo(self,"Updating " + link_name + " to user config")
+                        nepi_msg.publishMsgInfo(self,"Updating " + link_name + " to user config: " + user_cfg_name)
                         self.symlink_force(user_cfg_name, link_name)
                     else:
-                    	nepi_msg.publishMsgWarn(self,"User config file does not exist at " + user_cfg_name)
+                    	nepi_msg.publishMsgInfo(self,"User config file does not exist at " + user_cfg_name)
 
         # Now handle non-ROS user system configs.        
         for name in SYS_CFGS_TO_PRESERVE:

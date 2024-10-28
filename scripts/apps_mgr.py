@@ -75,39 +75,23 @@ class NepiAppsMgr(object):
     #nepi_msg.publishMsgInfo(self,"App folder set to " + self.apps_folder)
     self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
     #nepi_msg.publishMsgInfo(self,"App folder files " + str(self.apps_files))
-    # Get Install Apps Folder
-
+    # Initialize apps_mgr param server
     self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.initParamServerValues, 
                                  paramsModifiedCallback=self.updateFromParamServer)
-
-    nepi_msg.publishMsgWarn(self,"Calling user reset: ")
-
     self.save_cfg_if.userReset()
     time.sleep(3)
-    
     apps_dict = nepi_ros.get_param(self,"~apps_dict",dict())
-    short_dict = dict()
+    app_dict = dict()
+    #nepi_msg.publishMsgWarn(self,"Got init apps dict: " + str(apps_dict))
     for app_name in apps_dict:
-      short_dict[app_name] = apps_dict[app_name]['active']
-    nepi_msg.publishMsgWarn(self,"Got init apps dict: " + str(short_dict))
-    
+      app_dict[app_name] = apps_dict[app_name]['active']
+    nepi_msg.publishMsgInfo(self,"Got init app dict active list: " + str(app_dict))
     self.initParamServerValues(do_updates = True)
-
-
-
-
-
-
-    apps_dict = nepi_ros.get_param(self,"~apps_dict",dict())
-    short_dict = dict()
-    for app_name in apps_dict:
-      short_dict[app_name] = apps_dict[app_name]['active']
-    nepi_msg.publishMsgWarn(self,"Got post initParams apps dict: " + str(short_dict))
 
     self.init_active_list = nepi_ros.get_param(self,"~active_list",[])
     nepi_ros.set_param(self,"~active_list",self.init_active_list)
 
-
+    # setup folders
     get_folder_name_service = self.base_namespace + 'system_storage_folder_query'
     nepi_msg.publishMsgInfo(self,"Waiting for system storage folder query service " + get_folder_name_service)
     rospy.wait_for_service(get_folder_name_service)
@@ -178,6 +162,175 @@ class NepiAppsMgr(object):
     # Spin forever (until object is detected)
     nepi_ros.spin()
     #########################################################
+
+
+   #######################
+  ### Mgr Config Functions
+
+  def resetMgrCb(self,msg):
+    self.resetMgr()
+
+  def resetMgr(self):
+    # reset apps dict
+    nepi_ros.set_param(self,"~backup_enabled",True)
+    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+    self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
+    apps_dict = nepi_apps.getAppsgetAppsDict(self.apps_folder)
+    apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
+    apps_dict = activateAllApps(apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
+    self.resetParamServer()
+    self.publish_status()
+
+
+  def refreshCb(self,msg):
+    self.refresh()
+
+  def refresh(self):
+    # refresh apps dict
+    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+    self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
+    apps_dict = nepi_apps.refreshAppsDict(self.apps_folder,apps_dict)
+    nepi_ros.set_param(self,"~apps_dict",apps_dict)
+    self.publish_status()
+
+  def saveConfigCb(self, msg):  # Just update Class init values. Saving done by Config IF system
+    pass # Left empty for sim, Should update from param server
+
+  def setCurrentAsDefault(self):
+    nepi_ros.set_param(self,"~backup_enabled", True)
+    self.initParamServerValues(do_updates = False)
+    self.publish_status()
+
+  def updateFromParamServer(self):
+    #Run any functions that need updating on value change
+    # Don't need to run any additional functionsinstallAppPkgCb
+    pass
+    
+  def initParamServerValues(self,do_updates = True):
+      self.selected_app = 'NONE'
+      nepi_msg.publishMsgInfo(self,"Setting init values to param values")
+      self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
+      self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+      self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
+      none_dict = dict(NoneApps = "None")
+      apps_dict = nepi_ros.get_param(self,"~apps_dict",none_dict)
+      if 'NoneApps' not in apps_dict.keys():
+        apps_dict = nepi_ros.get_param(self,"~apps_dict",apps_dict)
+        apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
+      else:
+        apps_dict = nepi_apps.getAppsDict(self.apps_folder)
+        apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
+        active_list = nepi_ros.get_param(self,"~active_list",[])
+        if "ALL" in active_list:
+          apps_dict = nepi_apps.activateAllApps(apps_dict)
+        else:
+          apps_dict = nepi_apps.initAppsActiveOrder(active_list,apps_dict)
+      #self.printND()
+      self.init_apps_dict = apps_dict
+      self.apps_ordered_list = nepi_apps.getAppsOrderedList(apps_dict)
+      self.apps_active_list = nepi_apps.getAppsActiveOrderedList(apps_dict)
+      self.init_active_list = self.apps_active_list
+
+      self.resetParamServer(do_updates)
+      #self.printND()
+
+  def resetParamServer(self,do_updates = True):
+      nepi_ros.set_param(self,"~apps_dict",self.init_apps_dict)
+      nepi_ros.set_param(self,"~active_list",self.init_active_list)
+      nepi_ros.set_param(self,"~backup_enabled",self.init_backup_enabled)
+      nepi_ros.set_param(self,"~apps_dict",self.init_apps_dict)
+      if do_updates:
+          self.updateFromParamServer()
+
+  def publishStatusCb(self,timer):
+    self.publish_status()
+
+
+  def checkAndUpdateCb(self,_):
+    ###############################
+    ## First update Database
+    
+    apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+    self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
+    need_update = self.apps_files != apps_files
+    if need_update:
+      nepi_msg.publishMsgInfo(self,"Need to Update App Database")
+      self.initParamServerValues()
+    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
+    ## process active app processes
+
+
+    ###############################
+    # Get list of active nodes
+    warnings.filterwarnings('ignore', '.*unclosed.*', ) 
+    node_namespace_list = nepi_ros.get_node_list()
+    node_list = []
+    for i in range(len(node_namespace_list)):
+      node_list.append(node_namespace_list[i].split("/")[-1])
+    #nepi_msg.publishMsgInfo(self,str(node_list),level = "WARN")
+    ################################    
+    ## Check and purge disabled app proccess that might be running
+    # First check on running nodes
+    purge_list = []
+    for app_name in self.apps_ordered_list:
+      if app_name not in self.apps_active_list and app_name in self.apps_active_dict.keys():
+          node_name = self.apps_active_dict[app_name]['node_name']
+          if node_name in node_list:
+            sub_process = self.apps_active_dict[app_name]['subprocess']
+            success = nepi_apps.killAppNode(node_name,sub_process)
+            if success:
+              purge_list.append(app_name)
+    # purge from active discovery dict
+    for app_name in purge_list:
+      if app_name in self.apps_active_dict.keys():
+        del self.apps_active_dict[app_name]
+
+
+    ################################    
+    ## Process Apps
+    for app_name in self.apps_ordered_list:
+      if app_name in self.apps_active_list and app_name in apps_dict.keys():
+        app_dict = apps_dict[app_name]
+        #nepi_msg.publishMsgInfo(self,app_dict,level = "WARN")
+        app_pkg_name = app_dict['APP_DICT']['pkg_name']
+        app_file_name = app_dict['APP_DICT']['app_file']
+        app_config_file_name = app_dict['APP_DICT']['config_file']
+        app_path_name = app_dict['APP_DICT']['app_path']
+        app_node_name = app_dict['APP_DICT']['node_name']
+        app_file_path = app_path_name + '/' + app_file_name
+        if app_name not in self.apps_active_dict.keys():
+          #Try and initialize app param values
+          config_file_path = APPS_CONFIG_FALLBACK_FOLDER + "/" + app_config_file_name.split(".")[0] + "/" + app_config_file_name
+          params_namespace = os.path.join(self.base_namespace, app_node_name)
+          apt_dict_pn = os.path.join(params_namespace, 'app_dict')
+          nepi_ros.set_param(self,apt_dict_pn,app_dict)
+          if os.path.exists(config_file_path):
+            try:
+              nepi_ros.load_params_from_file(config_file_path, params_namespace)
+            except Exception as e:
+              nepi_msg.publishMsgWarn(self,"Could not get params from config file: " + config_file_path + " " + str(e))
+          else:
+            nepi_msg.publishMsgWarn(self,"Could not find config file at: " + config_file_path + " starting with factory settings")
+          #Try and launch node
+          nepi_msg.publishMsgInfo(self,"")
+          nepi_msg.publishMsgInfo(self,"Launching application node: " + app_node_name)
+          [success, msg, sub_process] = nepi_apps.launchAppNode(app_pkg_name, app_file_name, app_node_name)
+          if success:
+            apps_dict[app_name]['msg'] = "Discovery process lanched"
+            self.apps_active_dict[app_name]=dict()
+            self.apps_active_dict[app_name]['node_name'] = app_node_name
+            self.apps_active_dict[app_name]['subprocess'] = sub_process
+
+    # Publish Status
+    self.publish_status()
+    # And now that we are finished, start a timer for the appt runDiscovery()
+    nepi_ros.sleep(self.UPDATE_CHECK_INTERVAL,100)
+    nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
+   
+  
+
 
 
   def appStatusService(self,request):
@@ -398,172 +551,6 @@ class NepiAppsMgr(object):
 
 
 
-   #######################
-  ### Mgr Config Functions
-
-  def resetMgrCb(self,msg):
-    self.resetMgr()
-
-  def resetMgr(self):
-    # reset apps dict
-    nepi_ros.set_param(self,"~backup_enabled",True)
-    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
-    self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
-    apps_dict = nepi_apps.getAppsgetAppsDict(self.apps_folder)
-    apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
-    apps_dict = activateAllApps(apps_dict)
-    nepi_ros.set_param(self,"~apps_dict",apps_dict)
-    self.resetParamServer()
-    self.publish_status()
-
-
-  def refreshCb(self,msg):
-    self.refresh()
-
-  def refresh(self):
-    # refresh apps dict
-    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
-    self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
-    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
-    apps_dict = nepi_apps.refreshAppsDict(self.apps_folder,apps_dict)
-    nepi_ros.set_param(self,"~apps_dict",apps_dict)
-    self.publish_status()
-
-  def saveConfigCb(self, msg):  # Just update Class init values. Saving done by Config IF system
-    pass # Left empty for sim, Should update from param server
-
-  def setCurrentAsDefault(self):
-    nepi_ros.set_param(self,"~backup_enabled", True)
-    self.initParamServerValues(do_updates = False)
-    self.publish_status()
-
-  def updateFromParamServer(self):
-    #Run any functions that need updating on value change
-    # Don't need to run any additional functionsinstallAppPkgCb
-    pass
-    
-  def initParamServerValues(self,do_updates = True):
-      self.selected_app = 'NONE'
-      nepi_msg.publishMsgInfo(self,"Setting init values to param values")
-      self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
-      self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
-      self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
-      none_dict = dict(None = "None")
-      apps_dict = nepi_ros.get_param(self,"~apps_dict",none_dict)
-      if 'None' not in apps_dict.keys():
-        apps_dict = nepi_ros.get_param(self,"~apps_dict",apps_dict)
-        apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
-      else:
-        apps_dict = nepi_apps.getAppsDict(self.apps_folder)
-        apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
-        active_list = nepi_ros.get_param(self,"~active_list",[])
-        if "ALL" in active_list:
-          apps_dict = nepi_apps.activateAllApps(apps_dict)
-        else:
-          apps_dict = nepi_apps.initAppsActiveOrder(active_list,apps_dict)
-      #self.printND()
-      self.init_apps_dict = apps_dict
-      self.apps_ordered_list = nepi_apps.getAppsOrderedList(apps_dict)
-      self.apps_active_list = nepi_apps.getAppsActiveOrderedList(apps_dict)
-      self.init_active_list = self.apps_active_list
-
-      self.resetParamServer(do_updates)
-      #self.printND()
-
-  def resetParamServer(self,do_updates = True):
-      nepi_ros.set_param(self,"~apps_dict",self.init_apps_dict)
-      nepi_ros.set_param(self,"~active_list",self.init_active_list)
-      nepi_ros.set_param(self,"~backup_enabled",self.init_backup_enabled)
-      nepi_ros.set_param(self,"~apps_dict",self.init_apps_dict)
-      if do_updates:
-          self.updateFromParamServer()
-
-  def publishStatusCb(self,timer):
-    self.publish_status()
-
-
-  def checkAndUpdateCb(self,_):
-    ###############################
-    ## First update Database
-    
-    apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
-    self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
-    need_update = self.apps_files != apps_files
-    if need_update:
-      nepi_msg.publishMsgInfo(self,"Need to Update App Database")
-      self.initParamServerValues()
-    apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
-    ## process active app processes
-
-
-    ###############################
-    # Get list of active nodes
-    warnings.filterwarnings('ignore', '.*unclosed.*', ) 
-    node_namespace_list = nepi_ros.get_node_list()
-    node_list = []
-    for i in range(len(node_namespace_list)):
-      node_list.append(node_namespace_list[i].split("/")[-1])
-    #nepi_msg.publishMsgInfo(self,str(node_list),level = "WARN")
-    ################################    
-    ## Check and purge disabled app proccess that might be running
-    # First check on running nodes
-    purge_list = []
-    for app_name in self.apps_ordered_list:
-      if app_name not in self.apps_active_list and app_name in self.apps_active_dict.keys():
-          node_name = self.apps_active_dict[app_name]['node_name']
-          if node_name in node_list:
-            sub_process = self.apps_active_dict[app_name]['subprocess']
-            success = nepi_apps.killAppNode(node_name,sub_process)
-            if success:
-              purge_list.append(app_name)
-    # purge from active discovery dict
-    for app_name in purge_list:
-      if app_name in self.apps_active_dict.keys():
-        del self.apps_active_dict[app_name]
-
-
-    ################################    
-    ## Process Apps
-    for app_name in self.apps_ordered_list:
-      if app_name in self.apps_active_list and app_name in apps_dict.keys():
-        app_dict = apps_dict[app_name]
-        #nepi_msg.publishMsgInfo(self,app_dict,level = "WARN")
-        app_pkg_name = app_dict['APP_DICT']['pkg_name']
-        app_file_name = app_dict['APP_DICT']['app_file']
-        app_config_file_name = app_dict['APP_DICT']['config_file']
-        app_path_name = app_dict['APP_DICT']['app_path']
-        app_node_name = app_dict['APP_DICT']['node_name']
-        app_file_path = app_path_name + '/' + app_file_name
-        if app_name not in self.apps_active_dict.keys():
-          #Try and initialize app param values
-          config_file_path = APPS_CONFIG_FALLBACK_FOLDER + "/" + app_config_file_name.split(".")[0] + "/" + app_config_file_name
-          params_namespace = os.path.join(self.base_namespace, app_node_name)
-          apt_dict_pn = os.path.join(params_namespace, 'app_dict')
-          nepi_ros.set_param(self,apt_dict_pn,app_dict)
-          if os.path.exists(config_file_path):
-            try:
-              nepi_ros.load_params_from_file(config_file_path, params_namespace)
-            except Exception as e:
-              nepi_msg.publishMsgWarn(self,"Could not get params from config file: " + config_file_path + " " + str(e))
-          else:
-            nepi_msg.publishMsgWarn(self,"Could not find config file at: " + config_file_path + " starting with factory settings")
-          #Try and launch node
-          nepi_msg.publishMsgInfo(self,"")
-          nepi_msg.publishMsgInfo(self,"Launching application node: " + app_node_name)
-          [success, msg, sub_process] = nepi_apps.launchAppNode(app_pkg_name, app_file_name, app_node_name)
-          if success:
-            apps_dict[app_name]['msg'] = "Discovery process lanched"
-            self.apps_active_dict[app_name]=dict()
-            self.apps_active_dict[app_name]['node_name'] = app_node_name
-            self.apps_active_dict[app_name]['subprocess'] = sub_process
-
-    # Publish Status
-    self.publish_status()
-    # And now that we are finished, start a timer for the appt runDiscovery()
-    nepi_ros.sleep(self.UPDATE_CHECK_INTERVAL,100)
-    nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
-   
-  
 
   #######################
   # Misc Utility Function

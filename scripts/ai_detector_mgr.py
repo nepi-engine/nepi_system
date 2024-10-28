@@ -86,7 +86,12 @@ class AIDetectorManager:
         cv2_img = nepi_img.create_message_image(message)
         self.ros_message_img = nepi_img.cv2img_to_rosimg(cv2_img) 
 
-         ## Find AI Frameworks
+        # Initialize apps_mgr param server
+        self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.setCurrentSettingsAsDefault, 
+                                    paramsModifiedCallback=self.updateFromParamServer)
+        self.save_cfg_if.userReset()
+        time.sleep(3)
+        ## Find AI Frameworks
         # Get ai framework dict form param server and update
         ais_dict = nepi_ais.getAIsDict(self.AI_IF_FOLDER_PATH)
         #nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
@@ -158,7 +163,7 @@ class AIDetectorManager:
         if 'detection_image' in self.data_products:
             factory_data_rates['detection_image'] = [1.0, 0.0, 100.0] 
         self.save_data_if = SaveDataIF(data_product_names = self.data_products, factory_data_rate_dict = factory_data_rates)
-        self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.setCurrentSettingsAsDefault, paramsModifiedCallback=self.updateFromParamServer)
+
 
         # Setup Node Services
         rospy.Service('~img_classifier_list_query', ImageClassifierListQuery, self.provideClassifierList)
@@ -210,6 +215,42 @@ class AIDetectorManager:
         # Spin forever (until object is detected)
         nepi_ros.spin()
         #########################################################
+
+
+    def setCurrentSettingsAsDefault(self):
+        nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
+        nepi_ros.set_param(self,'~default_image', self.current_img_topic)
+        nepi_ros.set_param(self,'~default_threshold', self.current_threshold)
+
+
+    def updateFromParamServer(self):
+        try:
+            default_classifier = nepi_ros.get_param(self,'~default_classifier',"None")
+            default_img_topic = nepi_ros.get_param(self,'~default_image',"None")
+            default_threshold = nepi_ros.get_param(self,'~default_threshold',0.3)
+        except KeyError:
+            nepi_msg.publishMsgInfo(self,"Classifier unable to find default parameters... starting up with no classifier running")
+            return 
+        models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
+        if default_classifier in models_dict.keys():
+            self.current_classifier = default_classifier
+            self.current_classifier_classes = models_dict[default_classifier]['classes']
+            self.current_threshold = default_threshold
+            if default_classifier != "None":
+                if default_img_topic != "None":
+                    check_time = 0
+                    sleep_time = 1
+                    timeout_s = 20
+                    nepi_msg.publishMsgInfo(self,"Will wait for " + str(timeout_s) + " seconds for image topic: " +  default_img_topic)
+                    image_topic = nepi_ros.find_topic(default_img_topic)
+                    while image_topic == "" and check_time < timeout_s:
+                        time.sleep(sleep_time)
+                        check_time += sleep_time
+                        image_topic = nepi_ros.find_topic(default_img_topic)
+                    if check_time < timeout_s:
+                        nepi_msg.publishMsgInfo(self,'AI_MGR: AI_MGR: Starting classifier with parameters [' + default_classifier + ', ' + default_img_topic + ', ' + str(default_threshold) + ']')
+                        self.current_img_topic = default_img_topic
+                        self.startClassifier(default_classifier, default_img_topic, default_threshold)
 
     def detectionImageCb(self,img_in_msg):
         if self.classifier_state == "Running":
@@ -497,40 +538,7 @@ class AIDetectorManager:
 
 
                 
-    def setCurrentSettingsAsDefault(self):
-        nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
-        nepi_ros.set_param(self,'~default_image', self.current_img_topic)
-        nepi_ros.set_param(self,'~default_threshold', self.current_threshold)
-
-
-    def updateFromParamServer(self):
-        try:
-            default_classifier = nepi_ros.get_param(self,'~default_classifier',"None")
-            default_img_topic = nepi_ros.get_param(self,'~default_image',"None")
-            default_threshold = nepi_ros.get_param(self,'~default_threshold',0.3)
-        except KeyError:
-            nepi_msg.publishMsgInfo(self,"Classifier unable to find default parameters... starting up with no classifier running")
-            return 
-        models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
-        if default_classifier in models_dict.keys():
-            self.current_classifier = default_classifier
-            self.current_classifier_classes = models_dict[default_classifier]['classes']
-            self.current_threshold = default_threshold
-            if default_classifier != "None":
-                if default_img_topic != "None":
-                    check_time = 0
-                    sleep_time = 1
-                    timeout_s = 20
-                    nepi_msg.publishMsgInfo(self,"Will wait for " + str(timeout_s) + " seconds for image topic: " +  default_img_topic)
-                    image_topic = nepi_ros.find_topic(default_img_topic)
-                    while image_topic == "" and check_time < timeout_s:
-                        time.sleep(sleep_time)
-                        check_time += sleep_time
-                        image_topic = nepi_ros.find_topic(default_img_topic)
-                    if check_time < timeout_s:
-                        nepi_msg.publishMsgInfo(self,'AI_MGR: AI_MGR: Starting classifier with parameters [' + default_classifier + ', ' + default_img_topic + ', ' + str(default_threshold) + ']')
-                        self.current_img_topic = default_img_topic
-                        self.startClassifier(default_classifier, default_img_topic, default_threshold)
+ 
 
     
 
