@@ -100,10 +100,12 @@ class config_mgr(object):
     def update_from_file(self,file_pathname, namespace):
         try:
             paramlist = rosparam.load_file(file_pathname, namespace, verbose=True)
+            nepi_msg.publishMsgWarn(self,"Got Params for namespace: " + namespace  + " from file " + file_pathname  + " : " + str*(paramlist))
+
             for params, ns in paramlist:
                 rosparam.upload_params(ns, params, verbose=True)
         except:
-            nepi_msg.publishMsg(self,"Unable to load factory parameters from file " + file_pathname)
+            nepi_msg.publishMsgWarn(self,"Unable to load factory parameters from file " + file_pathname)
             return [False]
 
         return [True]
@@ -140,7 +142,7 @@ class config_mgr(object):
     def user_reset(self,req):
         qualified_node_name = req.node_name
         cfg_pathname = self.get_cfg_pathname(qualified_node_name)
-        nepi_msg.publishMsgWarn(self,"User reseting params for node_name: " + qualified_node_name)
+        nepi_msg.publishMsgWarn(self,"User reseting params for node_name: " + qualified_node_name  + " from file " + cfg_pathname)
         # Now update the param server
         return self.update_from_file(cfg_pathname, qualified_node_name)
 

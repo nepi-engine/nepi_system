@@ -83,7 +83,7 @@ class NepiAppsMgr(object):
     nepi_msg.publishMsgWarn(self,"Calling user reset: ")
 
     self.save_cfg_if.userReset()
-    time.sleep(1)
+    time.sleep(3)
     
     apps_dict = nepi_ros.get_param(self,"~apps_dict",dict())
     short_dict = dict()
@@ -448,9 +448,9 @@ class NepiAppsMgr(object):
       self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
       self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
       self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
-      none_dict = dict(NoneDict = "None")
+      none_dict = dict(None = "None")
       apps_dict = nepi_ros.get_param(self,"~apps_dict",none_dict)
-      if 'NoneDict' not in apps_dict.keys():
+      if 'None' not in apps_dict.keys():
         apps_dict = nepi_ros.get_param(self,"~apps_dict",apps_dict)
         apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
       else:
