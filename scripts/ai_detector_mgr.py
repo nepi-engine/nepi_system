@@ -96,7 +96,11 @@ class AIDetectorManager:
         ais_dict = nepi_ais.getAIsDict(self.AI_IF_FOLDER_PATH)
         #nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
         self.init_ais_dict = nepi_ros.get_param(self,'~ais_dict', ais_dict)
-        self.init_ais_dict = nepi_ais.updateAIsDict(self.AI_IF_FOLDER_PATH,self.init_ais_dict)
+        try:
+            self.init_ais_dict = nepi_ais.updateAIsDict(self.AI_IF_FOLDER_PATH,self.init_ais_dict)
+        except:
+            nepi_msg.publishMsgWarn(self,"Got bad ais_dict from param server so resetting")
+            self.init_ais_dict = ais_dict
         nepi_ros.set_param(self,'~ais_dict', self.init_ais_dict)
         #nepi_msg.publishMsgWarn(self,"Got updated ais dict from param server " + str(self.init_ais_dict))
         for ai_name in self.init_ais_dict.keys():

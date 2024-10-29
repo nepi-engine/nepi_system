@@ -93,7 +93,8 @@ class NepiDriversMgr(object):
     drv_dict = dict()
     #nepi_msg.publishMsgWarn(self,"Got init drvs dict: " + str(drvs_dict))
     for drv_name in drvs_dict:
-      drv_dict[drv_name] = drvs_dict[drv_name]['active']
+      if 'active'  in drvs_dict[drv_name].keys():
+        drv_dict[drv_name] = drvs_dict[drv_name]['active']
     nepi_msg.publishMsgInfo(self,"Got init drv dict active list: " + str(drv_dict))
     self.initParamServerValues(do_updates = True)
 
@@ -229,14 +230,18 @@ class NepiDriversMgr(object):
       self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
       self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
       self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
-      #nepi_msg.publishMsgInfo(self,str(nepi_ros.get_param(self,"~drvs_dict")))
       none_dict = dict(NoneDict = "None")
       drvs_dict = nepi_ros.get_param(self,"~drvs_dict",none_dict)
+      #nepi_msg.publishMsgWarn(self,"Got initParams drvs dict")
       #nepi_drv.printDict(drvs_dict)
       if 'NoneDict' not in drvs_dict.keys():
-        drvs_dict = nepi_drv.updateDriversDict(self.drivers_folder,drvs_dict)
-        nepi_msg.publishMsgInfo(self,"Got drvs_dict values from param server")
-      else:
+        try:
+          drvs_dict = nepi_drv.updateDriversDict(self.drivers_folder,drvs_dict)
+          nepi_msg.publishMsgInfo(self,"Got drvs_dict values from param server")
+        except:
+          nepi_msg.publishMsgWarn(self,"Got bad dict from param server server so reseting")
+          drvs_dict = none_dict
+      if 'NoneDict' in drvs_dict.keys():
         nepi_msg.publishMsgInfo(self,"No saved drvs_dict in config, creating a a new database")
         drvs_dict = nepi_drv.getDriversDict(self.drivers_folder)
         drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
@@ -462,7 +467,27 @@ class NepiDriversMgr(object):
     status_drivers_msg = DriversStatus()
     status_drivers_msg.drivers_path = self.drivers_folder
     status_drivers_msg.drivers_ordered_list = self.drivers_ordered_list
+    group_list = []
+    group_id_list = []
+    for driver_name in self.drivers_ordered_list:
+      group_list.append(drvs_dict[driver_name]['group'])
+      group_id_list.append(drvs_dict[driver_name]['group_id'])
+    status_drivers_msg.drivers_group_list = group_list
+    status_drivers_msg.drivers_group_id_list = group_id_list
     status_drivers_msg.drivers_active_list = self.drivers_active_list
+    active_groups = []
+    for driver_name in self.drivers_active_list:
+      active_groups.append(drvs_dict[driver_name]['group'])
+    active_group_list = []
+    if "IDX" in active_groups:
+      active_group_list.append("IDX")
+    if "PTX" in active_groups:
+      active_group_list.append("PTX")
+    if "LSX" in active_groups:
+      active_group_list.append("LSX")
+    if "RBX" in active_groups:
+      active_group_list.append("RBX")
+    status_drivers_msg.drivers_active_group_list = active_group_list
     status_drivers_msg.drivers_install_path = self.drivers_install_folder
     status_drivers_msg.drivers_install_list = self.drivers_install_files
     status_drivers_msg.driver_backup_path = self.drivers_install_folder

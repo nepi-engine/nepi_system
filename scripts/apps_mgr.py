@@ -217,9 +217,13 @@ class NepiAppsMgr(object):
       none_dict = dict(NoneApps = "None")
       apps_dict = nepi_ros.get_param(self,"~apps_dict",none_dict)
       if 'NoneApps' not in apps_dict.keys():
-        apps_dict = nepi_ros.get_param(self,"~apps_dict",apps_dict)
-        apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
-      else:
+        try:
+          apps_dict = nepi_ros.get_param(self,"~apps_dict",apps_dict)
+          apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
+        except:
+          nepi_msg.publishMsgWarn(self,"Got bad dict from param server server so reseting")
+          apps_dict = none_dict
+      if 'NoneApps' in apps_dict.keys():
         apps_dict = nepi_apps.getAppsDict(self.apps_folder)
         apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
         active_list = nepi_ros.get_param(self,"~active_list",[])
