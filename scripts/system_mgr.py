@@ -168,10 +168,33 @@ class SystemMgrNode():
 
         self.valid_device_id_re = re.compile(r"^[a-zA-Z][\w]*$")
 
+        # Want to update the op_environment (from param server) through the whole system once at
+        # start-up, but the only reasonable way to do that is to delay long enough to let all nodes start
+        #rospy.sleep(3)
+        self.updateFromParamServer()
+
+        # Reset the A/B rootfs boot fail counter -- if this node is running, pretty safe bet that we've booted successfully
+        # This should be redundant, as we need a non-ROS reset mechanism, too, in case e.g., ROS nodes are delayed waiting
+        # for a remote ROS master to start. That could be done in roslaunch.sh or a separate start-up script.
+        if self.rootfs_ab_scheme == 'nepi': # The 'jetson' scheme handles this itself
+            status, err_msg = sw_update_utils.resetBootFailCounter(
+                self.first_stage_rootfs_device)
+            if status is False:
+                rospy.logerr("Failed to reset boot fail counter: " + err_msg)
+
+        rospy.Timer(nepi_ros.duration(self.STATUS_PERIOD),
+                    self.publish_periodic_status)
+
+        # Call the method to update s/w status once internally to prime the status fields now that we have all the parameters
+        # established
+        rospy.sleep(3)
+        self.provide_sw_update_status(0) # Any argument is fine here as the req. field is unused
+        
+
         #########################################################
         ## Initiation Complete
         nepi_msg.publishMsgInfo(self,"Initialization Complete")
-        self.run()
+        rospy.spin()
 
 
 
@@ -718,29 +741,7 @@ class SystemMgrNode():
             "~ssd_device", self.ssd_device
         )
     
-    def run(self):
-        # Want to update the op_environment (from param server) through the whole system once at
-        # start-up, but the only reasonable way to do that is to delay long enough to let all nodes start
-        rospy.sleep(3)
-        self.updateFromParamServer()
 
-        # Reset the A/B rootfs boot fail counter -- if this node is running, pretty safe bet that we've booted successfully
-        # This should be redundant, as we need a non-ROS reset mechanism, too, in case e.g., ROS nodes are delayed waiting
-        # for a remote ROS master to start. That could be done in roslaunch.sh or a separate start-up script.
-        if self.rootfs_ab_scheme == 'nepi': # The 'jetson' scheme handles this itself
-            status, err_msg = sw_update_utils.resetBootFailCounter(
-                self.first_stage_rootfs_device)
-            if status is False:
-                rospy.logerr("Failed to reset boot fail counter: " + err_msg)
-
-        rospy.Timer(nepi_ros.duration(self.STATUS_PERIOD),
-                    self.publish_periodic_status)
-
-        # Call the method to update s/w status once internally to prime the status fields now that we have all the parameters
-        # established
-        self.provide_sw_update_status(0) # Any argument is fine here as the req. field is unused
-        
-        rospy.spin()
 
 
 
