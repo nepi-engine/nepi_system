@@ -67,6 +67,8 @@ class NepiDriversMgr(object):
 
   init_backup_enabled = True
 
+  status_drivers_msg = DriversStatus()
+  status_driver_msg = DriverStatus()
 
   #######################
   ### Node Initialization
@@ -458,7 +460,8 @@ class NepiDriversMgr(object):
     if not nepi_ros.is_shutdown():
       #nepi_msg.publishMsgWarn(self,"DriversStatus: " + str(self.status_drivers_msg))
       self.drivers_status_pub.publish(self.status_drivers_msg)
-    self.save_cfg_if.saveConfig(do_param_updates = False) # Save config after initialization for drvt time
+      if self.last_status_drivers_msg != self.status_drivers_msg:
+        self.save_cfg_if.saveConfig(do_param_updates = False) # Save config after initialization for drvt time
 
   def getDriversStatusMsg(self):
     drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
@@ -497,10 +500,13 @@ class NepiDriversMgr(object):
 
   
   def publish_driver_status(self):
+    self.last_status_driver_msg = self.status_driver_msg
     self.status_driver_msg = self.getDriverStatusMsg()
     if not nepi_ros.is_shutdown():
       #nepi_msg.publishMsgWarn(self,"DriverStatus: " + str(self.status_driver_msg))
       self.driver_status_pub.publish(self.status_driver_msg)
+      if self.last_status_driver_msg != self.status_driver_msg:
+        self.save_cfg_if.saveConfig(do_param_updates = False) # Save config after initialization for drvt time
 
 
   def getDriverStatusMsg(self):

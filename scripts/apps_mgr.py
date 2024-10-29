@@ -56,7 +56,8 @@ class NepiAppsMgr(object):
   apps_install_files = []
   apps_install_list = []
   apps_active_dict = dict()
-  status_apps_msg = None
+  status_apps_msg = AppsStatus()
+  status_app_msg = AppStatus()
 
   #######################
   ### Node Initialization
@@ -395,7 +396,8 @@ class NepiAppsMgr(object):
     self.status_apps_msg = self.getAppsStatusMsg()
     if not nepi_ros.is_shutdown():
       self.apps_status_pub.publish(self.status_apps_msg)
-    self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
+      if self.last_status_apps_msg != self.status_apps_msg:
+        self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
 
   def getAppsStatusMsg(self):
     apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
@@ -420,9 +422,12 @@ class NepiAppsMgr(object):
 
   
   def publish_app_status(self):
+    self.last_status_app_msg = self.status_app_msg
     self.status_app_msg = self.getAppStatusMsg()
     if not nepi_ros.is_shutdown():
       self.app_status_pub.publish(self.status_app_msg)
+      if self.last_status_app_msg != self.status_app_msg:
+        self.save_cfg_if.saveConfig(do_param_updates = False) # Save config
 
 
   def getAppStatusMsg(self):
