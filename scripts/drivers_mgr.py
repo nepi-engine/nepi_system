@@ -341,7 +341,8 @@ class NepiDriversMgr(object):
             discovery_node_name = discovery_name.lower() + "_discovery"
             if drv_name not in self.discovery_active_dict.keys():
               #Setup required param server drv_dict for discovery node
-              dict_param_name = os.path.join(discovery_node_name, "/drv_dict")
+              dict_param_name = os.path.join(discovery_node_name, "drv_dict")
+              #nepi_msg.publishMsgWarn(self,"Passing param name: " + dict_param_name + " drv_dict: " + str(drv_dict))
               nepi_ros.set_param(self,dict_param_name,drv_dict)
               #Try and launch node
               nepi_msg.publishMsgInfo(self,"")
