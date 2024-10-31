@@ -34,8 +34,8 @@ from nepi_edge_sdk_base.save_data_if import SaveDataIF
 
 
 class AIDetectorManager:
-    AI_IF_FOLDER_PATH = '/opt/nepi/ros/share/nepi_ai_ifs'
-    AI_MODEL_LIB_PATH = '/mnt/nepi_storage/ai_models/'
+    AI_SHARE_FOLDER = '/opt/nepi/ros/share/nepi_aifs'
+    AI_MODEL_LIB = '/mnt/nepi_storage/ai_models/'
     # AI Detection Setttings
     NODE_NAME = "ai_detector_mgr"
     
@@ -93,11 +93,11 @@ class AIDetectorManager:
         time.sleep(3)
         ## Find AI Frameworks
         # Get ai framework dict form param server and update
-        ais_dict = nepi_ais.getAIsDict(self.AI_IF_FOLDER_PATH)
+        ais_dict = nepi_ais.getAIsDict(self.AI_SHARE_FOLDER)
         #nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
         self.init_ais_dict = nepi_ros.get_param(self,'~ais_dict', ais_dict)
         try:
-            self.init_ais_dict = nepi_ais.updateAIsDict(self.AI_IF_FOLDER_PATH,self.init_ais_dict)
+            self.init_ais_dict = nepi_ais.updateAIsDict(self.AI_SHARE_FOLDER,self.init_ais_dict)
         except:
             nepi_msg.publishMsgWarn(self,"Got bad ais_dict from param server so resetting")
             self.init_ais_dict = ais_dict
@@ -108,10 +108,11 @@ class AIDetectorManager:
             nepi_msg.publishMsgInfo(self,"Processing ais dict for ai name " + ai_name + " " + str(ai_dict))
             if ai_dict['active']:
                 nepi_msg.publishMsgInfo(self,"Updating ai dict for framework: " + str(ai_name))
-                file_name = ai_dict['if_file']
+                file_name = ai_dict['if_file_name']
                 file_path = ai_dict['if_path']
-                module_name = ai_dict['module_name']
-                class_name = ai_dict['class_name']
+                module_name = ai_dict['if_module_name']
+                class_name = ai_dict['if_class_name']
+                sys.path.append(file_path)
                 [success, msg, ai_class] = nepi_ais.importAIClass(file_name,file_path,module_name,class_name)
                 if success == False:
                     nepi_msg.publishMsgWarn(self,"Failed to import ai framework if file " + file_name)
@@ -121,7 +122,7 @@ class AIDetectorManager:
                     try:
                         nepi_msg.publishMsgInfo(self,"Instantiating IF class for framework type: " + str(ai_name))
                         pub_sub_namespace = os.path.join(self.base_namespace, self.node_name)
-                        class_instance = ai_class(ai_dict,pub_sub_namespace,self.AI_MODEL_LIB_PATH)
+                        class_instance = ai_class(ai_dict,pub_sub_namespace,self.AI_MODEL_LIB)
                         success = True
                         time.sleep(1) # Give some time for publishers to set in class init
                     except Exception as e:
