@@ -334,8 +334,6 @@ class NepiAppsMgr(object):
     nepi_ros.sleep(self.UPDATE_CHECK_INTERVAL,100)
     nepi_ros.timer(nepi_ros.duration(1), self.checkAndUpdateCb, oneshot=True)
    
-  
-
 
 
   def appStatusService(self,request):
