@@ -174,6 +174,9 @@ class AIDetectorManager:
         rospy.Service('~img_classifier_list_query', ImageClassifierListQuery, self.provideClassifierList)
         rospy.Service('~img_classifier_status_query', ImageClassifierStatusQuery, self.provideClassifierStatus)
         # Setup Constant Node Subscribers
+        app_reset_app_sub = rospy.Subscriber('~reset_app', Empty, self.resetAppCb, queue_size = 10)
+
+
         rospy.Subscriber('~start_classifier', ClassifierSelection, self.startClassifierCb)
         rospy.Subscriber('~stop_classifier', Empty, self.stopClassifierCb)
         rospy.Subscriber('~set_threshold', Float32, self.setThresholdCb) 
@@ -183,8 +186,6 @@ class AIDetectorManager:
         #mgr_reset_sub = rospy.Subscriber('~refresh_ais', Empty, self.refreshCb, queue_size = 10)
 
         self.pub_sub_namespace = self.base_namespace + self.node_name
-        SOURCE_IMAGE_TOPIC = self.pub_sub_namespace + "/source_image"
-        self.source_image_pub = rospy.Publisher(SOURCE_IMAGE_TOPIC, Image, queue_size=1, latch=True)
         DETECTION_IMAGE_TOPIC = self.pub_sub_namespace + "/detection_image"
         self.detection_image_pub = rospy.Publisher(DETECTION_IMAGE_TOPIC, Image,queue_size=1, latch=True)
         rospy.Subscriber(DETECTION_IMAGE_TOPIC, Image, self.detectionImageCb, queue_size = 1)
@@ -211,7 +212,6 @@ class AIDetectorManager:
         self.updateFromParamServer()
         self.saveEnabledSettings() # Save config
         self.ros_message_img.header.stamp = nepi_ros.time_now()
-        self.source_image_pub.publish(self.ros_message_img)
         self.detection_image_pub.publish(self.ros_message_img)
         self.publish_status()
         #########################################################
@@ -229,13 +229,9 @@ class AIDetectorManager:
 
 
     def updateFromParamServer(self):
-        try:
-            default_classifier = nepi_ros.get_param(self,'~default_classifier',"None")
-            default_img_topic = nepi_ros.get_param(self,'~default_image',"None")
-            default_threshold = nepi_ros.get_param(self,'~default_threshold',0.3)
-        except KeyError:
-            nepi_msg.publishMsgInfo(self,"Classifier unable to find default parameters... starting up with no classifier running")
-            return 
+        default_classifier = nepi_ros.get_param(self,'~default_classifier',"None")
+        default_img_topic = nepi_ros.get_param(self,'~default_image',"None")
+        default_threshold = nepi_ros.get_param(self,'~default_threshold',0.3)
         models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
         if default_classifier in models_dict.keys():
             self.current_classifier = default_classifier
@@ -305,6 +301,24 @@ class AIDetectorManager:
         status_msg.active_ai_models = nepi_ais.getModelsActiveSortedList(models_dict)
         if not nepi_ros.is_shutdown():
             self.aif_status_pub.publish(status_msg)
+
+
+    def resetAppCb(self,msg):
+        self.resetApp()
+
+    def resetApp(self):
+        self.stopClassifier()
+        self.current_classifier = "None"
+        self.current_classifier_classes = []
+        self.current_img_topic = "None"
+        self.current_threshold = 0.3
+
+        nepi_ros.set_param(self,'~default_classifier',"None")
+        nepi_ros.set_param(self,'~default_image',"None")
+        nepi_ros.set_param(self,'~default_threshold',0.3)
+
+        self.publish_status()
+
 
 
     def startClassifierCb(self, classifier_selection_msg):
@@ -387,7 +401,6 @@ class AIDetectorManager:
             #self.current_threshold = None
             time.sleep(1)
             self.ros_message_img.header.stamp = nepi_ros.time_now()
-            self.source_image_pub.publish(self.ros_message_img)
             self.detection_image_pub.publish(self.ros_message_img)
 
     def setThresholdCb(self, msg):
@@ -508,7 +521,6 @@ class AIDetectorManager:
         if (self.classifier_state != ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_RUNNING):
             self.ros_message_img.header.stamp = nepi_ros.time_now()
             self.detection_image_pub.publish(self.ros_message_img)
-            self.source_image_pub.publish(self.ros_message_img)
 
         # Look for Depth Map
         if self.current_img_topic != "None":
