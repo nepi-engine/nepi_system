@@ -205,15 +205,13 @@ class AIDetectorManager:
 
         self.aif_status_pub = rospy.Publisher("~status", AiFrameworksStatus, queue_size=1, latch=True)
         time.sleep(1)
-        rospy.Timer(rospy.Duration(0.5), self.statusPublishCb)
-
-
+       
         # Load default params
         self.updateFromParamServer()
         self.saveEnabledSettings() # Save config
         self.ros_message_img.header.stamp = nepi_ros.time_now()
         self.detection_image_pub.publish(self.ros_message_img)
-        self.publish_status()
+        nepi_ros.timer(nepi_ros.duration(1), self.updaterCb)
         #########################################################
         ## Initiation Complete
         nepi_msg.publishMsgInfo(self,"Initialization Complete")
@@ -230,28 +228,15 @@ class AIDetectorManager:
 
     def updateFromParamServer(self):
         default_classifier = nepi_ros.get_param(self,'~default_classifier',"None")
-        default_img_topic = nepi_ros.get_param(self,'~default_image',"None")
-        default_threshold = nepi_ros.get_param(self,'~default_threshold',0.3)
+        self.current_img_topic = nepi_ros.get_param(self,'~default_image',"None")
+        self.current_threshold = nepi_ros.get_param(self,'~default_threshold',0.3)
         models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
         if default_classifier in models_dict.keys():
             self.current_classifier = default_classifier
             self.current_classifier_classes = models_dict[default_classifier]['classes']
-            self.current_threshold = default_threshold
-            if default_classifier != "None":
-                if default_img_topic != "None":
-                    check_time = 0
-                    sleep_time = 1
-                    timeout_s = 20
-                    nepi_msg.publishMsgInfo(self,"Will wait for " + str(timeout_s) + " seconds for image topic: " +  default_img_topic)
-                    image_topic = nepi_ros.find_topic(default_img_topic)
-                    while image_topic == "" and check_time < timeout_s:
-                        time.sleep(sleep_time)
-                        check_time += sleep_time
-                        image_topic = nepi_ros.find_topic(default_img_topic)
-                    if check_time < timeout_s:
-                        nepi_msg.publishMsgInfo(self,'AI_MGR: AI_MGR: Starting classifier with parameters [' + default_classifier + ', ' + default_img_topic + ', ' + str(default_threshold) + ']')
-                        self.current_img_topic = default_img_topic
-                        self.startClassifier(default_classifier, default_img_topic, default_threshold)
+        else:
+            self.current_classifier = "None"
+            self.current_classifier_classes = []
 
     def detectionImageCb(self,img_in_msg):
         if self.classifier_state == "Running":
@@ -287,7 +272,16 @@ class AIDetectorManager:
         nepi_save.save_dict2file(self,data_product,bbs_dict,ros_timestamp)
 
 
-    def statusPublishCb(self,timer):
+    def updaterCb(self,timer):
+        #nepi_msg.publishMsgWarn(self,"Updating with image topic: " +  self.current_img_topic)
+        if self.current_classifier != "None":
+            if self.current_img_topic != "None":
+                if self.classifier_state == ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED:
+                    image_topic = nepi_ros.find_topic(self.current_img_topic)
+                    if image_topic != "":
+                        nepi_msg.publishMsgInfo(self,'Starting classifier with parameters [' + self.current_classifier + ', ' + self.current_img_topic + ', ' + str(self.current_threshold) + ']')
+                        self.current_img_topic = image_topic
+                        self.startClassifier(self.current_classifier, self.current_img_topic, self.current_threshold)
         self.publish_status()
 
 
@@ -364,6 +358,11 @@ class AIDetectorManager:
         self.current_classifier_classes = models_dict[classifier_name]['classes']
         self.current_img_topic = source_img_topic
         self.current_threshold = threshold
+
+        # Update param server
+        nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
+        nepi_ros.set_param(self,'~default_image', self.current_img_topic)
+        nepi_ros.set_param(self,'~default_threshold', self.current_threshold)
  
         # Start the classifier
         
@@ -391,10 +390,9 @@ class AIDetectorManager:
         self.stopClassifier()
         
     def stopClassifier(self):
-        if self.classifier_class != None:
+        if self.classifier_class != None and self.classifier_state != ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED:
             self.classifier_class.stopClassifier()
             time.sleep(1)
-            self.classifier_class = None
             if not (None == self.update_state_sub):
                 self.update_state_sub.unregister()
             self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
@@ -402,6 +400,11 @@ class AIDetectorManager:
             time.sleep(1)
             self.ros_message_img.header.stamp = nepi_ros.time_now()
             self.detection_image_pub.publish(self.ros_message_img)
+        self.current_classifier = "None"
+        self.current_classifier_classes = []
+        self.current_img_topic = "None"
+        nepi_ros.set_param(self,'~default_classifier',"None")
+        nepi_ros.set_param(self,'~default_image',"None")
 
     def setThresholdCb(self, msg):
         # All we do here is update the current_threshold so that it is up-to-date in status responses
