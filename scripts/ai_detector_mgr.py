@@ -1,5 +1,12 @@
 #!/usr/bin/env python
-
+#
+# Copyright (c) 2024 Numurus, LLC <https://www.numurus.com>.
+#
+# This file is part of nepi-engine
+# (see https://github.com/nepi-engine).
+#
+# License: 3-clause BSD, see https://opensource.org/licenses/BSD-3-Clause
+#
 import sys
 import os
 import os.path
@@ -326,56 +333,58 @@ class AIDetectorManager:
 
 
     def startClassifier(self, classifier_name, source_img_topic, threshold):
-        models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
-        # Check that the requested topic exists and has the expected type
-        all_topics = nepi_ros.get_published_topics()
-        found_topic = False
-        for t in all_topics:
-            if (t[0] == source_img_topic) and (t[1] == 'sensor_msgs/Image'):
-                found_topic = True
-                break
-        if (False == found_topic):
-            nepi_msg.publishMsgErr(self,"Topic " + source_img_topic + " is not a valid image topic -- not starting classifier")
-            return
-            
-        # Validate the requested_detection threshold
-        if (threshold < self.MIN_THRESHOLD):
-            threshold = self.MIN_THRESHOLD
-        elif (threshold > self.MAX_THRESHOLD):
-            threshold = self.MAX_THRESHOLD
+        if classifier_name != "None":
+            if source_img_topic != "None":
+                models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
+                # Check that the requested topic exists and has the expected type
+                all_topics = nepi_ros.get_published_topics()
+                found_topic = False
+                for t in all_topics:
+                    if (t[0] == source_img_topic) and (t[1] == 'sensor_msgs/Image'):
+                        found_topic = True
+                        break
+                if (False == found_topic):
+                    nepi_msg.publishMsgErr(self,"Topic " + source_img_topic + " is not a valid image topic -- not starting classifier")
+                    return
+                    
+                # Validate the requested_detection threshold
+                if (threshold < self.MIN_THRESHOLD):
+                    threshold = self.MIN_THRESHOLD
+                elif (threshold > self.MAX_THRESHOLD):
+                    threshold = self.MAX_THRESHOLD
 
-        # Check that the requested classifier exists
+                # Check that the requested classifier exists
+                
+                if not (classifier_name in models_dict.keys()):
+                    nepi_msg.publishMsgErr(self,"Unknown classifier requested: " + classifier_name)
+                    return
+                # Stop the current classifier if it is running
+                self.stopClassifier()
+                time.sleep(1)
+
+                # Update our local status
+                self.current_classifier = classifier_name
+                self.current_classifier_classes = models_dict[classifier_name]['classes']
+                self.current_img_topic = source_img_topic
+                self.current_threshold = threshold
+
+                # Update param server
+                nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
+                nepi_ros.set_param(self,'~default_image', self.current_img_topic)
+                nepi_ros.set_param(self,'~default_threshold', self.current_threshold)
         
-        if not (classifier_name in models_dict.keys()):
-            nepi_msg.publishMsgErr(self,"Unknown classifier requested: " + classifier_name)
-            return
-        # Stop the current classifier if it is running
-        self.stopClassifier()
-        time.sleep(1)
-
-        # Update our local status
-        self.current_classifier = classifier_name
-        self.current_classifier_classes = models_dict[classifier_name]['classes']
-        self.current_img_topic = source_img_topic
-        self.current_threshold = threshold
-
-        # Update param server
-        nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
-        nepi_ros.set_param(self,'~default_image', self.current_img_topic)
-        nepi_ros.set_param(self,'~default_threshold', self.current_threshold)
- 
-        # Start the classifier
-        
-        classifier = models_dict[classifier_name]['name']
-        classifier_class = self.class_dict[classifier_name]
-        self.classifier_class = classifier_class
-        self.classifier_load_start_time = nepi_ros.time_now()
-        nepi_msg.publishMsgInfo(self,"Starting classifier " + classifier_name + " with classifier " + classifier + " with image " + self.current_img_topic)
-        self.classifier_class.startClassifier(classifier=classifier, source_img_topic=self.current_img_topic, threshold=self.current_threshold)
-        if self.found_object_sub is not None:
-            self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
-        self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING        
-        self.update_state_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.stateUpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
+                # Start the classifier
+                
+                classifier = models_dict[classifier_name]['name']
+                classifier_class = self.class_dict[classifier_name]
+                self.classifier_class = classifier_class
+                self.classifier_load_start_time = nepi_ros.time_now()
+                nepi_msg.publishMsgInfo(self,"Starting classifier " + classifier_name + " with classifier " + classifier + " with image " + self.current_img_topic)
+                self.classifier_class.startClassifier(classifier=classifier, source_img_topic=self.current_img_topic, threshold=self.current_threshold)
+                if self.found_object_sub is not None:
+                    self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
+                self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING        
+                self.update_state_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.stateUpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
 
 
 
@@ -390,6 +399,11 @@ class AIDetectorManager:
         self.stopClassifier()
         
     def stopClassifier(self):
+        self.current_classifier = "None"
+        self.current_classifier_classes = []
+        self.current_img_topic = "None"
+        nepi_ros.set_param(self,'~default_classifier',"None")
+        nepi_ros.set_param(self,'~default_image',"None")
         if self.classifier_class != None and self.classifier_state != ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED:
             self.classifier_class.stopClassifier()
             time.sleep(1)
@@ -400,11 +414,8 @@ class AIDetectorManager:
             time.sleep(1)
             self.ros_message_img.header.stamp = nepi_ros.time_now()
             self.detection_image_pub.publish(self.ros_message_img)
-        self.current_classifier = "None"
-        self.current_classifier_classes = []
-        self.current_img_topic = "None"
-        nepi_ros.set_param(self,'~default_classifier',"None")
-        nepi_ros.set_param(self,'~default_image',"None")
+
+
 
     def setThresholdCb(self, msg):
         # All we do here is update the current_threshold so that it is up-to-date in status responses
@@ -418,15 +429,8 @@ class AIDetectorManager:
         self.current_threshold = threshold
 
     def saveEnabledSettings(self):
-        # Clear classifier and image setting
-        nepi_ros.set_param(self,'~default_classifier', "None")
-        nepi_ros.set_param(self,'~default_image', "None")
         # Save framework and model dictionaries
         self.save_cfg_if.saveConfig(do_param_updates = False) # Save config after initialization for drvt time
-        # Reset classifier and image settings
-        nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
-        nepi_ros.set_param(self,'~default_image', self.current_img_topic)
-
 
 
     def enableAllFwsCb(self,msg):

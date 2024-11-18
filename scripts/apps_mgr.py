@@ -7,8 +7,6 @@
 #
 # License: 3-clause BSD, see https://opensource.org/licenses/BSD-3-Clause
 #
-
-
 import os
 #self.base_namespace = '/nepi/s2x/'
 #os.environ["ROS_NAMESPACE"] = self.base_namespace[0:-1]
