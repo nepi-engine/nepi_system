@@ -396,6 +396,7 @@ class AIDetectorManager:
 
 
     def stopClassifierCb(self, msg):
+        nepi_msg.publishMsgInfo(self,"Got stop classifier msg")
         self.stopClassifier()
         
     def stopClassifier(self):
@@ -418,6 +419,7 @@ class AIDetectorManager:
 
 
     def setThresholdCb(self, msg):
+        nepi_msg.publishMsgInfo(self,"Got threshold update msg: " + str(msg))
         # All we do here is update the current_threshold so that it is up-to-date in status responses
         # and will be saved properly in the config file (on request).  The actual threshold update is
         # done by ai framework node
