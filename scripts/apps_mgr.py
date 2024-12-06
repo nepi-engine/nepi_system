@@ -296,8 +296,9 @@ class NepiAppsMgr(object):
     for app_name in self.apps_ordered_list:
       if app_name in self.apps_active_list and app_name in apps_dict.keys():
         app_dict = apps_dict[app_name]
-        #nepi_msg.publishMsgInfo(self,app_dict,level = "WARN")
+        #nepi_msg.publishMsgWarn(self,app_dict)
         app_pkg_name = app_dict['APP_DICT']['pkg_name']
+        app_group_name = app_dict['APP_DICT']['group_name']
         app_file_name = app_dict['APP_DICT']['app_file']
         app_config_file_name = app_dict['APP_DICT']['config_file']
         app_path_name = app_dict['APP_DICT']['app_path']
@@ -348,8 +349,9 @@ class NepiAppsMgr(object):
     if app_name in apps_dict.keys() and app_name != 'NONE':
       app = apps_dict[app_name]
       try:
+        #nepi_msg.publishMsgWarn(self,app)
         status_app_msg.pkg_name = app['APP_DICT']['pkg_name']
-        status_app_msg.pkg_name = app['APP_DICT']['group_name']
+        status_app_msg.group_name = app['APP_DICT']['group_name']
         status_app_msg.description = app['APP_DICT']['description']
         status_app_msg.node_name = app['APP_DICT']['node_name']
         status_app_msg.app_file = app['APP_DICT']['app_file']
@@ -434,8 +436,9 @@ class NepiAppsMgr(object):
     if app_name in apps_dict.keys() and app_name != 'NONE':
       app = apps_dict[app_name]
       try:
+        #nepi_msg.publishMsgWarn(self,app)
         status_app_msg.pkg_name = app['APP_DICT']['pkg_name']
-        status_app_msg.pkg_name = app['APP_DICT']['group_name']
+        status_app_msg.group_name = app['APP_DICT']['group_name']
         status_app_msg.description = app['APP_DICT']['description']
         status_app_msg.node_name = app['APP_DICT']['node_name']
         status_app_msg.app_file = app['APP_DICT']['app_file']
