@@ -49,6 +49,7 @@ class AIDetectorManager:
     MIN_THRESHOLD = 0.001
     MAX_THRESHOLD = 1.0
     
+    DEFAULT_MAX_RATE = 5
 
     data_products = ['bounding_boxes','detection_image']
 
@@ -65,6 +66,7 @@ class AIDetectorManager:
     has_pointcloud = False
     pointcloud_topic = "None"
     current_threshold = 0.3
+    current_rate = 1
     classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED
     classifier_load_start_time = None
 
@@ -187,6 +189,7 @@ class AIDetectorManager:
         rospy.Subscriber('~start_classifier', ClassifierSelection, self.startClassifierCb)
         rospy.Subscriber('~stop_classifier', Empty, self.stopClassifierCb)
         rospy.Subscriber('~set_threshold', Float32, self.setThresholdCb) 
+        rospy.Subscriber('~set_max_rate', Float32, self.setMaxRateCb) 
 
         ## Mgr ROS Setup 
         #mgr_reset_sub = rospy.Subscriber('~factory_reset', Empty, self.resetMgrCb, queue_size = 10)
@@ -231,12 +234,13 @@ class AIDetectorManager:
         nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
         nepi_ros.set_param(self,'~default_image', self.current_img_topic)
         nepi_ros.set_param(self,'~default_threshold', self.current_threshold)
-
+        nepi_ros.set_param(self,'~default_rate', self.current_rate)
 
     def updateFromParamServer(self):
         default_classifier = nepi_ros.get_param(self,'~default_classifier',"None")
         self.current_img_topic = nepi_ros.get_param(self,'~default_image',"None")
         self.current_threshold = nepi_ros.get_param(self,'~default_threshold',0.3)
+        self.current_rate = nepi_ros.get_param(self,'~default_rate',self.DEFAULT_MAX_RATE)
         models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
         if default_classifier in models_dict.keys():
             self.current_classifier = default_classifier
@@ -317,7 +321,7 @@ class AIDetectorManager:
         nepi_ros.set_param(self,'~default_classifier',"None")
         nepi_ros.set_param(self,'~default_image',"None")
         nepi_ros.set_param(self,'~default_threshold',0.3)
-
+        nepi_ros.set_param(self,'~default_rate', self.DEFAULT_MAX_RATE)
         self.publish_status()
 
 
@@ -372,6 +376,7 @@ class AIDetectorManager:
                 nepi_ros.set_param(self,'~default_classifier', self.current_classifier)
                 nepi_ros.set_param(self,'~default_image', self.current_img_topic)
                 nepi_ros.set_param(self,'~default_threshold', self.current_threshold)
+                nepi_ros.set_param(self,'~default_rate', self.current_rate)
         
                 # Start the classifier
                 
@@ -380,7 +385,7 @@ class AIDetectorManager:
                 self.classifier_class = classifier_class
                 self.classifier_load_start_time = nepi_ros.time_now()
                 nepi_msg.publishMsgInfo(self,"Starting classifier " + classifier_name + " with classifier " + classifier + " with image " + self.current_img_topic)
-                self.classifier_class.startClassifier(classifier=classifier, source_img_topic=self.current_img_topic, threshold=self.current_threshold)
+                self.classifier_class.startClassifier(classifier=classifier, source_img_topic=self.current_img_topic, threshold=self.current_threshold, max_rate=self.current_rate)
                 if self.found_object_sub is not None:
                     self.found_object_sub = rospy.Subscriber('ai_detector_mgr/found_object', ObjectCount, self.UpdateCb) # Resubscribe to found_object so that we know when the classifier is up and running again
                 self.classifier_state = ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_LOADING        
@@ -429,6 +434,13 @@ class AIDetectorManager:
         elif (threshold > self.MAX_THRESHOLD):
             threshold = self.MAX_THRESHOLD
         self.current_threshold = threshold
+        
+
+    def setMaxRateCb(self,msg):
+        rate = msg.data
+        nepi_msg.publishMsgInfo(self,"Received Max Rate Update: " + str(rate))
+        if (rate > 0):
+            self.current_rate = rate
 
     def saveEnabledSettings(self):
         # Save framework and model dictionaries
@@ -557,7 +569,7 @@ class AIDetectorManager:
             self.has_pointcloud = False
 
         return [self.current_img_topic, self.current_classifier, self.current_classifier_classes, \
-                self.classifier_state, loading_progress, self.current_threshold, \
+                self.classifier_state, loading_progress, self.current_threshold, self.current_rate, \
                 self.has_depth_map,self.depth_map_topic,self.has_pointcloud,self.pointcloud_topic]
 
 

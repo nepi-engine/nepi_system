@@ -109,11 +109,11 @@ class config_mgr(object):
     def update_from_file(self,file_pathname, namespace):
         nepi_msg.publishMsgInfo(self,"Updating Params for namespace: " + namespace  + " from file " + file_pathname )
         try:
-            paramlist = rosparam.load_file(file_pathname, namespace, verbose=True)
+            paramlist = rosparam.load_file(file_pathname, namespace, verbose=False)
             #nepi_msg.publishMsgWarn(self,"Got Params for namespace: " + namespace  + " from file " + file_pathname  + " : " + str(paramlist))
 
             for params, ns in paramlist:
-                rosparam.upload_params(ns, params, verbose=True)
+                rosparam.upload_params(ns, params, verbose=False)
         except Exception as e:
             nepi_msg.publishMsgWarn(self,"Unable to load factory parameters from file " + file_pathname + " " + str(e))
             return [False]

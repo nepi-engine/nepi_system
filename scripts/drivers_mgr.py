@@ -94,14 +94,15 @@ class NepiDriversMgr(object):
     self.save_cfg_if.userReset()
     time.sleep(3)
     drvs_dict = nepi_ros.get_param(self,"~drvs_dict",dict())
-    drv_dict = dict()
     #nepi_msg.publishMsgWarn(self,"Got init drvs dict: " + str(drvs_dict))
-    for drv_name in drvs_dict:
-      if 'active'  in drvs_dict[drv_name].keys():
-        drv_dict[drv_name] = drvs_dict[drv_name]['active']
-    nepi_msg.publishMsgInfo(self,"Got init drv dict active list: " + str(drv_dict))
+    for drv_name in drvs_dict.keys():
+      drv_dict = drvs_dict[drv_name]
+      drvs_dict[drv_name] = nepi_drv.formatOptions(drv_dict)
+      #nepi_msg.publishMsgWarn(self,"Updated drvs dict: " + str(drvs_dict[drv_name]))
+      #nepi_msg.publishMsgWarn(self,"")
+    self.init_drvs_dict = drvs_dict
+    nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.initParamServerValues(do_updates = True)
-
     self.init_active_list = nepi_ros.get_param(self,"~active_list",[])
     nepi_ros.set_param(self,"~active_list",self.init_active_list)
 
@@ -416,22 +417,29 @@ class NepiDriversMgr(object):
     status_driver_msg.name = driver_name
     if driver_name in drvs_dict.keys() and driver_name != 'NONE':
       drv_dict = drvs_dict[driver_name]
-      status_driver_msg.group = drv_dict['NODE_DICT']['group']
-      status_driver_msg.group_id  = drv_dict['NODE_DICT']['group_id']
-      status_driver_msg.description = drv_dict['NODE_DICT']['description']
-      if drv_dict['NODE_DICT']['discovery_pkg_name'] != 'None':
-        status_driver_msg.interfaces  = drv_dict['DISCOVERY_DICT']['interfaces']
-        status_driver_msg.options_1_name  = drv_dict['DISCOVERY_DICT']['option_1_dict']['name']
-        status_driver_msg.options_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['options']
-        status_driver_msg.set_option_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['set_val']
-        status_driver_msg.options_2_name  = drv_dict['DISCOVERY_DICT']['option_2_dict']['name']
-        status_driver_msg.options_2  = drv_dict['DISCOVERY_DICT']['option_2_dict']['options']
-        status_driver_msg.set_option_2  = drv_dict['DISCOVERY_DICT']['option_2_dict']['set_val']
-        status_driver_msg.discovery = drv_dict['DISCOVERY_DICT']['method']
-      status_driver_msg.other_users_list  = drv_dict['users']
-      status_driver_msg.active_state  = drv_dict['active']
-      status_driver_msg.order  = drv_dict['order']
-      status_driver_msg.msg_str = drv_dict['msg']
+      #nepi_msg.publishMsgWarn(self,"Creating Drv Status Msg from Dict: " + str(drv_dict))
+      #nepi_msg.publishMsgWarn(self,"")
+      try:
+        status_driver_msg.group = drv_dict['NODE_DICT']['group']
+        status_driver_msg.group_id  = drv_dict['NODE_DICT']['group_id']
+        status_driver_msg.description = drv_dict['NODE_DICT']['description']
+        if drv_dict['NODE_DICT']['discovery_pkg_name'] != 'None':
+          status_driver_msg.interfaces  = drv_dict['DISCOVERY_DICT']['interfaces']
+          status_driver_msg.options_1_name  = drv_dict['DISCOVERY_DICT']['option_1_dict']['name']
+          status_driver_msg.options_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['options']
+          status_driver_msg.set_option_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['set_val']
+          status_driver_msg.options_2_name  = drv_dict['DISCOVERY_DICT']['option_2_dict']['name']
+          status_driver_msg.options_2  = drv_dict['DISCOVERY_DICT']['option_2_dict']['options']
+          status_driver_msg.set_option_2  = drv_dict['DISCOVERY_DICT']['option_2_dict']['set_val']
+          status_driver_msg.discovery = drv_dict['DISCOVERY_DICT']['method']
+        status_driver_msg.other_users_list  = drv_dict['users']
+        status_driver_msg.active_state  = drv_dict['active']
+        status_driver_msg.order  = drv_dict['order']
+        status_driver_msg.msg_str = drv_dict['msg']
+      except Exception as e:
+        nepi_msg.publishMsgWarn(self,"Failed to create drv service msg for : " + str(drv_dict) + " " + str(e))
+      #nepi_msg.publishMsgWarn(self,"Returning Drv Status Msg: " + str(status_driver_msg))
+      #nepi_msg.publishMsgWarn(self,"")
     return status_driver_msg
 
 
@@ -519,23 +527,36 @@ class NepiDriversMgr(object):
     status_driver_msg.name = driver_name
     if driver_name in drvs_dict.keys() and driver_name != 'NONE':
       drv_dict = drvs_dict[driver_name]
-      status_driver_msg.group = drv_dict['NODE_DICT']['group']
-      status_driver_msg.group_id  = drv_dict['NODE_DICT']['group_id']
-      status_driver_msg.description = drv_dict['NODE_DICT']['description']
-      if drv_dict['NODE_DICT']['discovery_pkg_name'] != 'None':
-        status_driver_msg.interfaces  = drv_dict['DISCOVERY_DICT']['interfaces']
-        status_driver_msg.options_1_name  = drv_dict['DISCOVERY_DICT']['option_1_dict']['name']
-        status_driver_msg.options_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['options']
-        status_driver_msg.set_option_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['set_val']
-        status_driver_msg.options_2_name  = drv_dict['DISCOVERY_DICT']['option_2_dict']['name']
-        status_driver_msg.options_2  = drv_dict['DISCOVERY_DICT']['option_2_dict']['options']
-        status_driver_msg.set_option_2  = drv_dict['DISCOVERY_DICT']['option_2_dict']['set_val']
-        status_driver_msg.discovery = drv_dict['DISCOVERY_DICT']['method']
-      status_driver_msg.other_users_list  = drv_dict['users']
-      status_driver_msg.active_state  = drv_dict['active']
-      status_driver_msg.order  = drv_dict['order']
-      status_driver_msg.msg_str = drv_dict['msg']
+      #nepi_msg.publishMsgWarn(self,"Creating Drv Status Msg from Dict: " + str(drv_dict))
+      #nepi_msg.publishMsgWarn(self,"")
+      try:
+        #nepi_msg.publishMsgWarn(self,"Driver Dict: " + str(drv_dict))
+        status_driver_msg.group = drv_dict['NODE_DICT']['group']
+        status_driver_msg.group_id  = drv_dict['NODE_DICT']['group_id']
+        status_driver_msg.description = drv_dict['NODE_DICT']['description']
+        if drv_dict['NODE_DICT']['discovery_pkg_name'] != 'None':
+          status_driver_msg.interfaces  = drv_dict['DISCOVERY_DICT']['interfaces']
+          status_driver_msg.options_1_name  = drv_dict['DISCOVERY_DICT']['option_1_dict']['name']
+          status_driver_msg.options_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['options']
+          status_driver_msg.set_option_1  = drv_dict['DISCOVERY_DICT']['option_1_dict']['set_val']
+          status_driver_msg.options_2_name  = drv_dict['DISCOVERY_DICT']['option_2_dict']['name']
+          status_driver_msg.options_2  = drv_dict['DISCOVERY_DICT']['option_2_dict']['options']
+          status_driver_msg.set_option_2  = drv_dict['DISCOVERY_DICT']['option_2_dict']['set_val']
+          status_driver_msg.discovery = drv_dict['DISCOVERY_DICT']['method']
+        status_driver_msg.other_users_list  = drv_dict['users']
+        status_driver_msg.active_state  = drv_dict['active']
+        status_driver_msg.order  = drv_dict['order']
+        status_driver_msg.msg_str = drv_dict['msg']
+      except Exception as e:
+        nepi_msg.publishMsgWarn(self,"Failed to create drv status msg for : " + str(drv_dict) + " " + str(e))
+      #nepi_msg.publishMsgWarn(self,"Returning Drv Status Msg: " + str(status_driver_msg))
+      #nepi_msg.publishMsgWarn(self,"")
     return status_driver_msg
+
+
+
+
+
 
   
   ###################
