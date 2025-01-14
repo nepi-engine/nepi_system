@@ -15,6 +15,7 @@ import collections
 import os
 from datetime import datetime
 import threading
+import requests
 
 from nepi_edge_sdk_base import nepi_ros
 from nepi_edge_sdk_base import nepi_msg 
@@ -76,7 +77,7 @@ class NetworkMgr:
         nepi_msg.createMsgPublishers(self)
         nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
         ##############################
-
+        self.in_container = nepi_ros.check_if_container()
         self.dhcp_enabled = False # initialize to false -- will be updated in set_dhcp_from_params
         self.tx_byte_cnt_deque = collections.deque(maxlen=2)
         self.rx_byte_cnt_deque = collections.deque(maxlen=2)
@@ -193,14 +194,14 @@ class NetworkMgr:
         try:
             new_ip_bits = socket.inet_aton(new_ip)
         except:
-            nepi_msg.publishMsgErr("Rejecting invalid IP address " + str(new_ip))
+            nepi_msg.publishMsgErr(self,"Rejecting invalid IP address " + str(new_ip))
             return False
         if (len(tokens) != 2):
-            nepi_msg.publishMsgErr("Rejecting invalid address must be in CIDR notation (x.x.x.x/y). Got " + str(addr))
+            nepi_msg.publishMsgErr(self,"Rejecting invalid address must be in CIDR notation (x.x.x.x/y). Got " + str(addr))
             return False
         cidr_netmask = (int)(tokens[1])
         if cidr_netmask < 1 or cidr_netmask > 32:
-            nepi_msg.publishMsgErr("Rejecting invalid CIDR netmask (got " + str(addr))
+            nepi_msg.publishMsgErr(self,"Rejecting invalid CIDR netmask (got " + str(addr))
             return False
 
         # Finally, verify that this isn't the "fixed" address on the device. Don't let anyone sneak past the same
@@ -210,10 +211,10 @@ class NetworkMgr:
         try:
             fixed_ip_bits = socket.inet_aton(fixed_ip_addr)
         except:
-            nepi_msg.publishMsgErr("Cannot validate IP address becaused fixed IP appears invalid "  + str(fixed_ip_addr))
+            nepi_msg.publishMsgErr(self,"Cannot validate IP address becaused fixed IP appears invalid "  + str(fixed_ip_addr))
             return False
         if (new_ip_bits == fixed_ip_bits):
-            nepi_msg.publishMsgErr("IP address invalid because it matches fixed primary IP")
+            nepi_msg.publishMsgErr(self,"IP address invalid because it matches fixed primary IP")
             return False
 
         return True
@@ -222,57 +223,60 @@ class NetworkMgr:
         try:
             subprocess.check_call(['ip','addr','add',new_addr,'dev',self.NET_IFACE])
         except:
-            nepi_msg.publishMsgErr("Failed to set IP address to " + str(new_addr))
+            nepi_msg.publishMsgErr(self,"Failed to set IP address to " + str(new_addr))
     def add_ip(self, new_addr_msg):
         if True == self.validate_cidr_ip(new_addr_msg.data):
             self.add_ip_impl(new_addr_msg.data)
         else:
-            nepi_msg.publishMsgErr("Unable to add invalid/ineligible IP address")
+            nepi_msg.publishMsgErr(self,"Unable to add invalid/ineligible IP address")
 
     def remove_ip_impl(self, old_addr):
         try:
             subprocess.check_call(['ip','addr','del',old_addr,'dev',self.NET_IFACE])
         except:
-            nepi_msg.publishMsgErr("Failed to remove IP address " + str(old_addr))
+            nepi_msg.publishMsgErr(self,"Failed to remove IP address " + str(old_addr))
 
     def remove_ip(self, old_addr_msg):
         if True == self.validate_cidr_ip(old_addr_msg.data):
             self.remove_ip_impl(old_addr_msg.data)
         else:
-            nepi_msg.publishMsgErr("Unable to remove invalid/ineligible IP address")
+            nepi_msg.publishMsgErr(self,"Unable to remove invalid/ineligible IP address")
 
+ 
     def enable_dhcp_impl(self, enabled):
-        if enabled is True:
-            if self.dhcp_enabled is False:
-                nepi_msg.publishMsgInfo(self,"Enabling DHCP Client")
-                try:
-                    subprocess.check_call(['dhclient', '-nw', self.NET_IFACE])
-                    self.dhcp_enabled = True
-                except Exception as e:
-                    nepi_msg.publishMsgErr("Unable to enable DHCP: " + str(e))
+        if self.in_container == False:
+            if enabled is True:
+                if self.dhcp_enabled is False:
+                    nepi_msg.publishMsgInfo(self,"Enabling DHCP Client")
+                    try:
+                        subprocess.check_call(['dhclient', '-nw', self.NET_IFACE])
+                        self.dhcp_enabled = True
+                    except Exception as e:
+                        nepi_msg.publishMsgErr(self,"Unable to enable DHCP: " + str(e))
+                else:
+                    nepi_msg.publishMsgInfo(self,"DHCP already enabled")
             else:
-                nepi_msg.publishMsgInfo(self,"DHCP already enabled")
+                if self.dhcp_enabled is True:
+                    nepi_msg.publishMsgInfo(self,"Disabling DHCP Client")
+                    try:
+                        # The dhclient -r call below causes all IP addresses on the interface to be dropped, so
+                        # we reinitialize them here... this will not work for IP addresses that were
+                        # added in this session but not saved to config (i.e., not known to param server)
+                        subprocess.check_call(['dhclient', '-r', self.NET_IFACE])
+                        self.dhcp_enabled = False
+                        nepi_ros.sleep(1)
+
+                        # Restart the interface -- this picks the original static IP back up and sources the user IP alias file
+                        subprocess.call(['ifdown', self.NET_IFACE])
+                        nepi_ros.sleep(1)
+                        subprocess.call(['ifup', self.NET_IFACE])
+
+                    except Exception as e:
+                        nepi_msg.publishMsgErr(self,"Unable to disable DHCP: " + str(e))
+                else:
+                    nepi_msg.publishMsgInfo(self,"DHCP already disabled")
         else:
-            if self.dhcp_enabled is True:
-                nepi_msg.publishMsgInfo(self,"Disabling DHCP Client")
-                try:
-                    # The dhclient -r call below causes all IP addresses on the interface to be dropped, so
-                    # we reinitialize them here... this will not work for IP addresses that were
-                    # added in this session but not saved to config (i.e., not known to param server)
-
-                    subprocess.check_call(['dhclient', '-r', self.NET_IFACE])
-                    self.dhcp_enabled = False
-                    nepi_ros.sleep(1)
-
-                    # Restart the interface -- this picks the original static IP back up and sources the user IP alias file
-                    subprocess.call(['ifdown', self.NET_IFACE])
-                    nepi_ros.sleep(1)
-                    subprocess.call(['ifup', self.NET_IFACE])
-
-                except Exception as e:
-                    nepi_msg.publishMsgErr("Unable to disable DHCP: " + str(e))
-            else:
-                nepi_msg.publishMsgInfo(self,"DHCP already disabled")
+            nepi_msg.publishMsgInfo(self,"Ignoring DHCP change request from container. Update in host system")
 
     def enable_dhcp(self, enabled_msg):
         self.enable_dhcp_impl(enabled_msg.data)
@@ -289,7 +293,7 @@ class NetworkMgr:
             try:
                 resp = user_reset_proxy(self.self.node_name)
             except rospy.ServiceException as exc:
-                nepi_msg.publishMsgErr("Unable to execute user reset")
+                nepi_msg.publishMsgErr(self,"Unable to execute user reset")
                 return
             self.set_dhcp_from_params()
         elif Reset.FACTORY_RESET == msg.reset_type:
@@ -297,7 +301,7 @@ class NetworkMgr:
             try:
                 resp = factory_reset_proxy(self.self.node_name)
             except rospy.ServiceException as exc:
-                nepi_msg.publishMsgErr("Unable to execute factory reset")
+                nepi_msg.publishMsgErr(self,"Unable to execute factory reset")
                 return
 
             # Overwrite the user static IP file with the blank version
@@ -383,7 +387,7 @@ class NetworkMgr:
             # Now ensure we can contact the new rosmaster -- if not, bail out
             ret_code = subprocess.call(['nc', '-zvw5', master_ip,  str(self.ROS_MASTER_PORT)])
             if (ret_code != 0):
-                nepi_msg.publishMsgErr("Failed to detect a remote rosmaster at " + master_ip + ":" + str(self.ROS_MASTER_PORT) + "... refusing to update ROS_MASTER_URI")
+                nepi_msg.publishMsgErr(self,"Failed to detect a remote rosmaster at " + master_ip + ":" + str(self.ROS_MASTER_PORT) + "... refusing to update ROS_MASTER_URI")
                 return
 
         # Edit the sys_env file appropriately
@@ -447,7 +451,7 @@ class NetworkMgr:
         try:
             subprocess.call([self.WONDERSHAPER_CALL, '-a', self.NET_IFACE, '-c'])
         except Exception as e:
-            nepi_msg.publishMsgErr("Unable to clear current bandwidth limits: " + str(e))
+            nepi_msg.publishMsgErr(self,"Unable to clear current bandwidth limits: " + str(e))
             return
 
         if bw_limit_mbps < 0: #Sentinel values to clear limits
@@ -461,7 +465,7 @@ class NetworkMgr:
             nepi_msg.publishMsgInfo(self,"Updated TX bandwidth limit to " + str(bw_limit_mbps) + " Mbps")
             #self.tx_byte_cnt_deque.clear()
         except Exception as e:
-            nepi_msg.publishMsgErr("Unable to set upload bandwidth limit: " + str(e))
+            nepi_msg.publishMsgErr(self,"Unable to set upload bandwidth limit: " + str(e))
 
     def enable_wifi_ap_handler(self, enabled_msg):
         if self.wifi_iface is None:
@@ -498,7 +502,7 @@ class NetworkMgr:
                                        self.wifi_iface, self.wifi_ap_ssid, self.wifi_ap_passphrase])
                 nepi_msg.publishMsgInfo(self,"Started WiFi access point: " + str(self.wifi_ap_ssid))
             except Exception as e:
-                nepi_msg.publishMsgErr("Unable to start wifi access point with " + str(e))
+                nepi_msg.publishMsgErr(self,"Unable to start wifi access point with " + str(e))
         else:
             try:
                 subprocess.check_call([self.CREATE_AP_CALL, '--stop', self.wifi_iface])
@@ -558,7 +562,7 @@ class NetworkMgr:
                                 f.write("network={\n\tssid=\"" + self.wifi_client_ssid + "\"\n\tkey_mgmt=NONE\n}")
 
                         start_supplicant_cmd = self.WPA_START_SUPPLICANT_CMD_PRE + [self.wifi_iface] + self.WPA_START_SUPPLICANT_CMD_POST
-                        #nepi_msg.publishMsgErr("DEBUG: Using command " + str(start_supplicant_cmd))
+                        #nepi_msg.publishMsgErr(self,"DEBUG: Using command " + str(start_supplicant_cmd))
                     
                         subprocess.call(self.STOP_WPA_SUPPLICANT_CMD)
                         self.wifi_client_connected = False
@@ -641,7 +645,8 @@ class NetworkMgr:
         connected = False
 
         try:
-            subprocess.check_call(self.INTERNET_CHECK_CMD, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            #subprocess.check_call(self.INTERNET_CHECK_CMD, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            response = requests.get("https://www.github.com", timeout=5)
             if prev_connected is False:
                 nepi_msg.publishMsgInfo(self,"Detected new internet connection")
             connected = True
@@ -656,9 +661,18 @@ class NetworkMgr:
 
         nepi_ros.timer(nepi_ros.duration(self.INTERNET_CHECK_INTERVAL_S), self.internet_check, oneshot = True)
 
+
+    def internet_connection(self):
+        try:
+            response = requests.get("https://www.google.com", timeout=5)
+            return True
+        except requests.ConnectionError:
+            return False    
+
+
     def handle_ip_addr_query(self, req):
         ips = self.get_current_ip_addrs()
-        return {'ip_addrs':ips, 'dhcp_enabled': self.dhcp_enabled}
+        return {'in_container': self.in_container, 'ip_addrs':ips, 'dhcp_enabled': self.dhcp_enabled}
 
     def handle_bandwidth_usage_query(self, req):
         tx_rate_mbps = 0

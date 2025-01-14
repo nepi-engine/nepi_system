@@ -53,34 +53,36 @@ class time_sync_mgr(object):
         nepi_msg.createMsgPublishers(self)
         nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
         ##############################
+        self.in_container = nepi_ros.check_if_container()
+        if self.in_container == False:
+            # Public namespace stuff
+            rospy.Subscriber('add_ntp_server', String, self.add_server)
+            rospy.Subscriber('remove_ntp_server', String, self.remove_server)
+            rospy.Subscriber('reset', Reset, self.reset)
+            rospy.Subscriber('set_time', Time, self.set_time)
 
-        # Public namespace stuff
-        rospy.Subscriber('add_ntp_server', String, self.add_server)
-        rospy.Subscriber('remove_ntp_server', String, self.remove_server)
-        rospy.Subscriber('reset', Reset, self.reset)
-        rospy.Subscriber('set_time', Time, self.set_time)
+            # Private namespace stuff
+            rospy.Subscriber('~reset', Reset, self.reset)
 
-        # Private namespace stuff
-        rospy.Subscriber('~reset', Reset, self.reset)
+            rospy.Service('time_status_query', TimeStatusQuery, self.handle_time_status_query)
 
-        rospy.Service('time_status_query', TimeStatusQuery, self.handle_time_status_query)
+            global g_sys_time_updated_pub
+            g_sys_time_updated_pub = rospy.Publisher('sys_time_updated', Empty, queue_size=3)
 
-        global g_sys_time_updated_pub
-        g_sys_time_updated_pub = rospy.Publisher('sys_time_updated', Empty, queue_size=3)
+            # Initialize the system clock from the RTC if so configured
+            # RTC will be updated whenever a "good" clock source is detected; that will control drift
+            init_from_rtc = rospy.get_param("~init_time_from_rtc", True)
+            if init_from_rtc is True:
+                rospy.loginfo("Initializing system clock from hardware clock")
+                subprocess.call(['hwclock', '-s'])
+                self.informClockUpdate() 
 
-        # Initialize the system clock from the RTC if so configured
-        # RTC will be updated whenever a "good" clock source is detected; that will control drift
-        init_from_rtc = rospy.get_param("~init_time_from_rtc", True)
-        if init_from_rtc is True:
-            rospy.loginfo("Initializing system clock from hardware clock")
-            subprocess.call(['hwclock', '-s'])
-            self.informClockUpdate() 
-
-        # Set up a periodic timer to check for NTP sync so we can inform the rest of the system when first sync detected
-        global g_ntp_status_check_timer
-        g_ntp_status_check_timer = rospy.Timer(rospy.Duration(5.0), self.gather_ntp_status_timer_cb)
-        g_ntp_status_check_timer.run()
-
+            # Set up a periodic timer to check for NTP sync so we can inform the rest of the system when first sync detected
+            global g_ntp_status_check_timer
+            g_ntp_status_check_timer = rospy.Timer(rospy.Duration(5.0), self.gather_ntp_status_timer_cb)
+            g_ntp_status_check_timer.run()
+        else:
+            nepi_msg.publishMsgInfo(self,"NEPI running in Container Mode. Time and NTP managed by host system")
         #########################################################
         ## Initiation Complete
         nepi_msg.publishMsgInfo(self,"Initialization Complete")

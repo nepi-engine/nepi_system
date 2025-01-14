@@ -30,9 +30,9 @@ from nepi_ros_interfaces.srv import AppStatusQuery, AppStatusQueryResponse
 
 from nepi_edge_sdk_base.save_cfg_if import SaveCfgIF
 
-APPS_FALLBACK_FOLDER = '/opt/nepi/ros/share/nepi_apps'
-APPS_INSTALL_FALLBACK_FOLDER = '/mnt/nepi_storage/nepi_src/nepi_apps'
-APPS_CONFIG_FALLBACK_FOLDER = '/opt/nepi/ros/etc'
+APPS_PARAM_FOLDER = '/opt/nepi/ros/share/nepi_apps'
+APPS_CONFIG_FOLDER = '/opt/nepi/ros/etc'
+APPS_INSTALL_FOLDER = '/opt/nepi/ros/share/nepi_apps'
 
 #########################################
 
@@ -46,7 +46,7 @@ class NepiAppsMgr(object):
   UPDATE_CHECK_INTERVAL = 5
   PUBLISH_STATUS_INTERVAL = 1
   save_cfg_if = None
-  apps_folder = ''
+  apps_param_folder = ''
   apps_files = []
   apps_ordered_list = []
   apps_active_list = []
@@ -68,11 +68,34 @@ class NepiAppsMgr(object):
     nepi_msg.createMsgPublishers(self)
     nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
     ##############################
+    '''
+    # Get driver folder paths
+    get_folder_name_service = self.base_namespace + 'system_storage_folder_query'
+    nepi_msg.publishMsgInfo(self,"Waiting for system folder query service " + get_folder_name_service)
+    rospy.wait_for_service(get_folder_name_service)
+    nepi_msg.publishMsgInfo(self,"Calling system drivers folder query service " + get_folder_name_service)
+    try:
+        nepi_msg.publishMsgInfo(self,"Getting drivers folder query service " + get_folder_name_service)
+        folder_query_service = rospy.ServiceProxy(get_folder_name_service, SystemStorageFolderQuery)
+        response = folder_query_service('nepi_apps')
+        nepi_msg.publishMsgInfo(self,"Got storage folder path" + response.folder_path)
+        time.sleep(1)
+        self.apps_param_folder = response.folder_path
+    except Exception as e:
+        self.apps_param_folder = DRIVERS_FOLDER
+        nepi_msg.publishMsgWarn(self,"Failed to obtain system drivers folder, falling back to: " + DRIVERS_FOLDER + " " + str(e))
+    if os.path.exists(self.apps_param_folder) == False:
+        self.apps_param_folder = ""
+    self.apps_param_folder = self.apps_param_folder
+    self.apps_install_folder = self.apps_param_folder
+    '''
+  
+    self.apps_param_folder = APPS_PARAM_FOLDER
+    self.apps_config_folder = APPS_CONFIG_FOLDER
+    self.apps_install_folder = APPS_PARAM_FOLDER
 
-    # Get app folder paths
-    self.apps_folder = APPS_FALLBACK_FOLDER
-    #nepi_msg.publishMsgInfo(self,"App folder set to " + self.apps_folder)
-    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+    #nepi_msg.publishMsgInfo(self,"App folder set to " + self.apps_param_folder)
+    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_param_folder)
     #nepi_msg.publishMsgInfo(self,"App folder files " + str(self.apps_files))
     # Initialize apps_mgr param server
     self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.initParamServerValues, 
@@ -89,26 +112,6 @@ class NepiAppsMgr(object):
 
     self.init_active_list = nepi_ros.get_param(self,"~active_list",[])
     nepi_ros.set_param(self,"~active_list",self.init_active_list)
-
-    # setup folders
-    get_folder_name_service = self.base_namespace + 'system_storage_folder_query'
-    nepi_msg.publishMsgInfo(self,"Waiting for system storage folder query service " + get_folder_name_service)
-    rospy.wait_for_service(get_folder_name_service)
-    nepi_msg.publishMsgInfo(self,"Calling system storage folder query service " + get_folder_name_service)
-    try:
-        nepi_msg.publishMsgInfo(self,"Getting storage folder query service " + get_folder_name_service)
-        folder_query_service = rospy.ServiceProxy(get_folder_name_service, SystemStorageFolderQuery)
-        response = folder_query_service('nepi_src/nepi_apps')
-        nepi_msg.publishMsgInfo(self,"Got storage folder path" + response.folder_path)
-        time.sleep(1)
-        self.save_data_root_directory = response.folder_path
-    except Exception as e:
-        self.save_data_root_directory = APPS_INSTALL_FALLBACK_FOLDER
-        nepi_msg.publishMsgWarn(self,self.node_name + "Failed to obtain system data folder, falling back to: " + APPS_INSTALL_FALLBACK_FOLDER + " " + str(e))
-    if os.path.exists(self.save_data_root_directory):
-        self.apps_install_folder = self.save_data_root_directory
-    else:
-        self.save_data_root_directory = ""
 
     nepi_msg.publishMsgInfo(self,"App folder set to " + self.apps_install_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
@@ -172,9 +175,9 @@ class NepiAppsMgr(object):
   def resetMgr(self):
     # reset apps dict
     nepi_ros.set_param(self,"~backup_enabled",True)
-    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_param_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
-    apps_dict = nepi_apps.getAppsgetAppsDict(self.apps_folder)
+    apps_dict = nepi_apps.getAppsgetAppsDict(self.apps_param_folder)
     apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
     apps_dict = activateAllApps(apps_dict)
     nepi_ros.set_param(self,"~apps_dict",apps_dict)
@@ -187,10 +190,10 @@ class NepiAppsMgr(object):
 
   def refresh(self):
     # refresh apps dict
-    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+    self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_param_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
     apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
-    apps_dict = nepi_apps.refreshAppsDict(self.apps_folder,apps_dict)
+    apps_dict = nepi_apps.refreshAppsDict(self.apps_param_folder,apps_dict)
     nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 
@@ -211,19 +214,19 @@ class NepiAppsMgr(object):
       self.selected_app = 'NONE'
       nepi_msg.publishMsgInfo(self,"Setting init values to param values")
       self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
-      self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+      self.apps_files = nepi_apps.getAppInfoFilesList(self.apps_param_folder)
       self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
       none_dict = dict(NoneApps = "None")
       apps_dict = nepi_ros.get_param(self,"~apps_dict",none_dict)
       if 'NoneApps' not in apps_dict.keys():
         try:
           apps_dict = nepi_ros.get_param(self,"~apps_dict",apps_dict)
-          apps_dict = nepi_apps.updateAppsDict(self.apps_folder,apps_dict)
+          apps_dict = nepi_apps.updateAppsDict(self.apps_param_folder,apps_dict)
         except:
           nepi_msg.publishMsgWarn(self,"Got bad dict from param server server so reseting")
           apps_dict = none_dict
       if 'NoneApps' in apps_dict.keys():
-        apps_dict = nepi_apps.getAppsDict(self.apps_folder)
+        apps_dict = nepi_apps.getAppsDict(self.apps_param_folder)
         apps_dict = nepi_apps.setFactoryAppOrder(apps_dict)
         active_list = nepi_ros.get_param(self,"~active_list",[])
         if "ALL" in active_list:
@@ -255,7 +258,7 @@ class NepiAppsMgr(object):
     ###############################
     ## First update Database
     
-    apps_files = nepi_apps.getAppInfoFilesList(self.apps_folder)
+    apps_files = nepi_apps.getAppInfoFilesList(self.apps_param_folder)
     self.apps_install_files = nepi_apps.getAppPackagesList(self.apps_install_folder)
     need_update = self.apps_files != apps_files
     if need_update:
@@ -306,7 +309,7 @@ class NepiAppsMgr(object):
         app_file_path = app_path_name + '/' + app_file_name
         if app_name not in self.apps_active_dict.keys():
           #Try and initialize app param values
-          config_file_path = APPS_CONFIG_FALLBACK_FOLDER + "/" + app_config_file_name.split(".")[0] + "/" + app_config_file_name
+          config_file_path = self.apps_config_folder + "/" + app_config_file_name.split(".")[0] + "/" + app_config_file_name
           params_namespace = os.path.join(self.base_namespace, app_node_name)
           apt_dict_pn = os.path.join(params_namespace, 'app_dict')
           nepi_ros.set_param(self,apt_dict_pn,app_dict)
@@ -403,7 +406,7 @@ class NepiAppsMgr(object):
     self.apps_group_list = nepi_apps.getAppsGroupList(apps_dict)
     self.apps_active_list = nepi_apps.getAppsActiveOrderedList(apps_dict)
     status_apps_msg = AppsStatus()
-    status_apps_msg.apps_path = self.apps_folder
+    status_apps_msg.apps_path = self.apps_param_folder
     status_apps_msg.apps_ordered_list = self.apps_ordered_list
     apps_group_list = []
     for app_name in self.apps_ordered_list:
@@ -533,7 +536,7 @@ class NepiAppsMgr(object):
     pkg_name = msg.data
     apps_dict = nepi_ros.get_param(self,"~apps_dict",self.init_apps_dict)
     if pkg_name in self.apps_install_files:
-     [success,apps_dict]  = nepi_apps.installAppPkg(pkg_name,apps_dict,self.apps_install_folder,self.apps_folder)
+     [success,apps_dict]  = nepi_apps.installAppPkg(pkg_name,apps_dict,self.apps_install_folder,self.apps_install_folder)
     nepi_ros.set_param(self,"~apps_dict",apps_dict)
     self.publish_status()
 

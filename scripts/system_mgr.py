@@ -59,14 +59,24 @@ class SystemMgrNode():
                             "nepi_full_img", 
                             "nepi_full_img_archive", 
                             "nepi_src",
-                            "nepi_src/nepi_drivers", 
-                            "nepi_src/nepi_apps",
-                            "nepi_src/nepi_aifs", 
                             "user_cfg",
-                            "sample_data"]
+                            "sample_data",
+                            "tmp"]
+                            
+    REQD_STORAGE_SUBDIRS_CN = ["ai_models", 
+                            "automation_scripts", 
+                            "data", 
+                            "databases", 
+                            "license", 
+                            "logs", 
+                            "logs/automation_script_logs", 
+                            "nepi_src",
+                            "user_cfg",
+                            "sample_data",
+                            "tmp"]
     
     DRIVERS_PATH = '/opt/nepi/ros/lib/nepi_drivers'
-    DRIVERS_PARAMS_PATH = '/opt/nepi/ros/share/nepi_drivers'
+    DRIVERS_PARAMS_PATH = '/opt/nepi/ros/lib/nepi_drivers'
     APPS_PARAMS_PATH = '/opt/nepi/ros/share/nepi_apps'
     AI_IF_FOLDER_PATH = '/opt/nepi/ros/share/nepi_aifs'
 
@@ -99,6 +109,14 @@ class SystemMgrNode():
         nepi_msg.createMsgPublishers(self)
         nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
         ##############################
+
+        self.in_container = nepi_ros.check_if_container()
+        if self.in_container == False:
+          self.req_storage_subdirs = self.REQD_STORAGE_SUBDIRS
+        else:
+          self.req_storage_subdirs = self.REQD_STORAGE_SUBDIRS_CN
+        
+        self.status_msg.in_container = self.in_container
 
         status_period = nepi_ros.duration(1)  # TODO: Configurable rate?
 
@@ -174,14 +192,15 @@ class SystemMgrNode():
         #rospy.sleep(3)
         self.updateFromParamServer()
 
-        # Reset the A/B rootfs boot fail counter -- if this node is running, pretty safe bet that we've booted successfully
-        # This should be redundant, as we need a non-ROS reset mechanism, too, in case e.g., ROS nodes are delayed waiting
-        # for a remote ROS master to start. That could be done in roslaunch.sh or a separate start-up script.
-        if self.rootfs_ab_scheme == 'nepi': # The 'jetson' scheme handles this itself
-            status, err_msg = sw_update_utils.resetBootFailCounter(
-                self.first_stage_rootfs_device)
-            if status is False:
-                rospy.logerr("Failed to reset boot fail counter: " + err_msg)
+        if self.in_container == False:
+          # Reset the A/B rootfs boot fail counter -- if this node is running, pretty safe bet that we've booted successfully
+          # This should be redundant, as we need a non-ROS reset mechanism, too, in case e.g., ROS nodes are delayed waiting
+          # for a remote ROS master to start. That could be done in roslaunch.sh or a separate start-up script.
+          if self.rootfs_ab_scheme == 'nepi': # The 'jetson' scheme handles this itself
+              status, err_msg = sw_update_utils.resetBootFailCounter(
+                  self.first_stage_rootfs_device)
+              if status is False:
+                  rospy.logerr("Failed to reset boot fail counter: " + err_msg)
 
         rospy.Timer(nepi_ros.duration(self.STATUS_PERIOD),
                     self.publish_periodic_status)
@@ -196,7 +215,6 @@ class SystemMgrNode():
         ## Initiation Complete
         nepi_msg.publishMsgInfo(self,"Initialization Complete")
         rospy.spin()
-
 
 
     def add_info_string(self, string, level):
@@ -382,7 +400,7 @@ class SystemMgrNode():
         self.storage_gid = stat_info.st_gid
 
         # Check for and create subdirectories as necessary
-        for subdir in self.REQD_STORAGE_SUBDIRS:
+        for subdir in self.req_storage_subdirs:
             full_path_subdir = os.path.join(self.storage_mountpoint, subdir)
             if not os.path.isdir(full_path_subdir):
                 rospy.logwarn("Required storage subdir " + subdir + " not present... will create")
@@ -681,28 +699,31 @@ class SystemMgrNode():
         self.status_msg.save_all_enabled = False
 
     def getNEPIStorageDevice(self):
-        # Try to read the NEPI storage device out of /etc/fstab
-        if os.path.exists('/etc/fstab'):
-            with open('/etc/fstab', 'r') as fstab:
-                lines = fstab.readlines()
-                for line in lines:
-                    if self.storage_mountpoint in line and not line.startswith('#'):
-                        candidate = line.split()[0] # First token is the device
-                        if candidate.startswith('/dev/'):
-                            self.nepi_storage_device = candidate
-                            rospy.loginfo('Identified NEPI storage device ' + self.nepi_storage_device + ' from /etc/fstab')
-                            return
-                        else:
-                            rospy.logwarn('Candidate NEPI storage device from /etc/fstab is of unexpected form: ' + candidate)
+        if self.in_container == False:
+          # Try to read the NEPI storage device out of /etc/fstab
+          if os.path.exists('/etc/fstab'):
+              with open('/etc/fstab', 'r') as fstab:
+                  lines = fstab.readlines()
+                  for line in lines:
+                      if self.storage_mountpoint in line and not line.startswith('#'):
+                          candidate = line.split()[0] # First token is the device
+                          if candidate.startswith('/dev/'):
+                              self.nepi_storage_device = candidate
+                              rospy.loginfo('Identified NEPI storage device ' + self.nepi_storage_device + ' from /etc/fstab')
+                              return
+                          else:
+                              rospy.logwarn('Candidate NEPI storage device from /etc/fstab is of unexpected form: ' + candidate)
             
-        # If we get here, failed to get the storage device from /etc/fstab
-        rospy.logwarn('Failed to get NEPI storage device from /etc/fstab -- falling back to system_mgr config file')
-        if not nepi_ros.has_param(self,"~nepi_storage_device"):
-            rospy.logerr("Parameter nepi_storage_device not available -- falling back to hard-coded " + self.nepi_storage_device)
-        else:
-            self.nepi_storage_device = nepi_ros.get_param(self,
+          # If we get here, failed to get the storage device from /etc/fstab
+          rospy.logwarn('Failed to get NEPI storage device from /etc/fstab -- falling back to system_mgr config file')
+          if not nepi_ros.has_param(self,"~nepi_storage_device"):
+              rospy.logerr("Parameter nepi_storage_device not available -- falling back to hard-coded " + self.nepi_storage_device)
+          else:
+              self.nepi_storage_device = nepi_ros.get_param(self,
                 "~nepi_storage_device", self.nepi_storage_device)
-            rospy.loginfo("Identified NEPI storage device " + self.nepi_storage_device + ' from config file')
+              rospy.loginfo("Identified NEPI storage device " + self.nepi_storage_device + ' from config file')
+        else:
+            self.nepi_storage_device = self.storage_mountpoint
     
     def updateFromParamServer(self):
         op_env = nepi_ros.get_param(self,

@@ -31,10 +31,9 @@ from nepi_ros_interfaces.srv import DriverStatusQuery, DriverStatusQueryResponse
 
 from nepi_edge_sdk_base.save_cfg_if import SaveCfgIF
 
-DRIVERS_PARAMS_FOLDER = '/opt/nepi/ros/share/nepi_drivers/params'
 DRIVERS_FOLDER = '/opt/nepi/ros/lib/nepi_drivers'
-DRIVERS_INSTALL_FALLBACK_FOLDER = '/mnt/nepi_storage/nepi_src/nepi_drivers'
-
+DRIVERS_PARAM_FOLDER = '/opt/nepi/ros/lib/nepi_drivers'
+DRIVERS_INSTALL_FOLDER = '/opt/nepi/ros/lib/nepi_drivers'
 #########################################
 
 #########################################
@@ -47,7 +46,7 @@ class NepiDriversMgr(object):
   PUBLISH_STATUS_INTERVAL = 1
   save_cfg_if = None
   drivers_folder = ''
-  drivers_params_folder = ''
+  DRIVERS_PARAM_FOLDER = ''
   drivers_files = []
   drivers_ordered_list = []
   drivers_active_list = []
@@ -82,12 +81,44 @@ class NepiDriversMgr(object):
     nepi_msg.createMsgPublishers(self)
     nepi_msg.publishMsgInfo(self,"Starting Initialization Processes")
     ##############################
-        # Get driver folder paths
-    self.drivers_params_folder = DRIVERS_PARAMS_FOLDER
+    '''
+    # Get driver folder paths
+    get_folder_name_service = self.base_namespace + 'system_storage_folder_query'
+    nepi_msg.publishMsgInfo(self,"Waiting for system folder query service " + get_folder_name_service)
+    rospy.wait_for_service(get_folder_name_service)
+    nepi_msg.publishMsgInfo(self,"Calling system drivers folder query service " + get_folder_name_service)
+    try:
+        nepi_msg.publishMsgInfo(self,"Getting drivers folder query service " + get_folder_name_service)
+        folder_query_service = rospy.ServiceProxy(get_folder_name_service, SystemStorageFolderQuery)
+        response = folder_query_service('nepi_drivers')
+        nepi_msg.publishMsgInfo(self,"Got storage folder path" + response.folder_path)
+        time.sleep(1)
+        self.drivers_folder = response.folder_path
+    except Exception as e:
+        self.drivers_folder = DRIVERS_FOLDER
+        nepi_msg.publishMsgWarn(self,"Failed to obtain system drivers folder, falling back to: " + DRIVERS_FOLDER + " " + str(e))
+    if os.path.exists(self.drivers_folder) == False:
+        self.drivers_folder = ""
+    self.drivers_folder = self.drivers_folder
+    self.drivers_install_folder = self.drivers_folder
+    self.drivers_param_folder = self.drivers_folder
+
+    '''
+    
     self.drivers_folder = DRIVERS_FOLDER
-    #nepi_msg.publishMsgInfo(self,"Driver folder set to " + self.drivers_params_folder)
-    self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_params_folder)
+    self.drivers_param_folder = DRIVERS_PARAM_FOLDER
+    self.drivers_install_folder = DRIVERS_INSTALL_FOLDER
+
+    
+    DRIVERS_PARAM_FOLDER
+    
+    self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
     #nepi_msg.publishMsgInfo(self,"Driver folder files " + str(self.drivers_files))
+    nepi_msg.publishMsgInfo(self,"Driver folder set to " + self.drivers_folder)
+    nepi_msg.publishMsgInfo(self,"Driver param folder set to " + self.drivers_param_folder)
+    self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
+    nepi_msg.publishMsgInfo(self,"Driver install packages folder files " + str(self.drivers_install_files))    
+ 
     # Setup drvs_mgr params
     self.save_cfg_if = SaveCfgIF(updateParamsCallback=self.initParamServerValues, 
                                  paramsModifiedCallback=self.updateFromParamServer)
@@ -106,29 +137,7 @@ class NepiDriversMgr(object):
     self.init_active_list = nepi_ros.get_param(self,"~active_list",[])
     nepi_ros.set_param(self,"~active_list",self.init_active_list)
 
-    # Setup folders
-    get_folder_name_service = self.base_namespace + 'system_storage_folder_query'
-    nepi_msg.publishMsgInfo(self,"Waiting for system storage folder query service " + get_folder_name_service)
-    rospy.wait_for_service(get_folder_name_service)
-    nepi_msg.publishMsgInfo(self,"Calling system storage folder query service " + get_folder_name_service)
-    try:
-        nepi_msg.publishMsgInfo(self,"Getting storage folder query service " + get_folder_name_service)
-        folder_query_service = rospy.ServiceProxy(get_folder_name_service, SystemStorageFolderQuery)
-        response = folder_query_service('nepi_src/nepi_drivers')
-        nepi_msg.publishMsgInfo(self,"Got storage folder path" + response.folder_path)
-        time.sleep(1)
-        self.save_data_root_directory = response.folder_path
-    except Exception as e:
-        self.save_data_root_directory = DRIVERS_INSTALL_FALLBACK_FOLDER
-        nepi_msg.publishMsgWarn(self,"Failed to obtain system data folder, falling back to: " + DRIVERS_INSTALL_FALLBACK_FOLDER + " " + str(e))
-    if os.path.exists(self.save_data_root_directory):
-        self.drivers_install_folder = self.save_data_root_directory
-    else:
-        self.save_data_root_directory = ""
 
-    nepi_msg.publishMsgInfo(self,"Driver folder set to " + self.drivers_install_folder)
-    self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
-    nepi_msg.publishMsgInfo(self,"Driver install packages folder files " + str(self.drivers_install_files))
 
     # Setup Node Status Publisher
     self.drivers_status_pub = rospy.Publisher("~status", DriversStatus, queue_size=1, latch=True)
@@ -193,9 +202,9 @@ class NepiDriversMgr(object):
   def resetMgr(self):
     # reset drivers dict
     nepi_ros.set_param(self,"~backup_enabled",True)
-    self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_params_folder)
+    self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_param_folder)
     self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
-    drvs_dict = nepi_drv.getDriversgetDriversDict(self.drivers_params_folder)
+    drvs_dict = nepi_drv.getDriversgetDriversDict(self.drivers_param_folder)
     drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
     drvs_dict = activateAllDrivers(drvs_dict)
     nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
@@ -208,10 +217,10 @@ class NepiDriversMgr(object):
 
   def refresh(self):
     # refresh drivers dict
-    self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_params_folder)
+    self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
     self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
     drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
-    drvs_dict = nepi_drv.refreshDriversDict(self.drivers_params_folder,drvs_dict)
+    drvs_dict = nepi_drv.refreshDriversDict(self.drivers_param_folder,drvs_dict)
     nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
@@ -233,7 +242,7 @@ class NepiDriversMgr(object):
       self.selected_driver = 'NONE'
       nepi_msg.publishMsgInfo(self,"Setting init values to param values")
       self.init_backup_enabled = nepi_ros.get_param(self,"~backup_enabled", True)
-      self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_params_folder)
+      self.drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
       self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
       none_dict = dict(NoneDict = "None")
       drvs_dict = nepi_ros.get_param(self,"~drvs_dict",none_dict)
@@ -241,14 +250,14 @@ class NepiDriversMgr(object):
       #nepi_drv.printDict(drvs_dict)
       if 'NoneDict' not in drvs_dict.keys():
         try:
-          drvs_dict = nepi_drv.updateDriversDict(self.drivers_params_folder,drvs_dict)
+          drvs_dict = nepi_drv.updateDriversDict(self.drivers_param_folder,drvs_dict)
           nepi_msg.publishMsgInfo(self,"Got drvs_dict values from param server")
         except:
           nepi_msg.publishMsgWarn(self,"Got bad dict from param server server so reseting")
           drvs_dict = none_dict
       if 'NoneDict' in drvs_dict.keys():
         nepi_msg.publishMsgInfo(self,"No saved drvs_dict in config, creating a a new database")
-        drvs_dict = nepi_drv.getDriversDict(self.drivers_params_folder)
+        drvs_dict = nepi_drv.getDriversDict(self.drivers_param_folder)
         drvs_dict = nepi_drv.setFactoryDriverOrder(drvs_dict)
         active_list = nepi_ros.get_param(self,"~active_list", [])
         #nepi_msg.publishMsgWarn(self,"Got factory active drivers list: " + str(active_list))
@@ -281,7 +290,7 @@ class NepiDriversMgr(object):
   def checkAndUpdateCb(self,_):
     ###############################
     ## First update Database
-    drivers_files = nepi_drv.getDriverFilesList(self.drivers_params_folder)
+    drivers_files = nepi_drv.getDriverFilesList(self.drivers_folder)
     self.drivers_install_files = nepi_drv.getDriverPackagesList(self.drivers_install_folder)
     need_update = self.drivers_files != drivers_files
     if need_update:
@@ -668,7 +677,7 @@ class NepiDriversMgr(object):
     pkg_name = msg.data
     drvs_dict = nepi_ros.get_param(self,"~drvs_dict",self.init_drvs_dict)
     if pkg_name in self.drivers_install_files:
-     [success,drvs_dict]  = nepi_drv.installDriverPkg(pkg_name,drvs_dict,self.drivers_install_folder,self.drivers_folder,self.drivers_params_folder)
+     [success,drvs_dict]  = nepi_drv.installDriverPkg(pkg_name,drvs_dict,self.drivers_install_folder,self.drivers_folder,self.drivers_folder)
     nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
@@ -681,7 +690,7 @@ class NepiDriversMgr(object):
     if backup_enabled:
       backup_folder = self.drivers_install_folder
     if driver_name in drvs_dict:
-      [success,drvs_dict] = nepi_drv.removeDriver(driver_name,drvs_dict,self.drivers_folder,self.drivers_params_folder,backup_path = backup_folder)
+      [success,drvs_dict] = nepi_drv.removeDriver(driver_name,drvs_dict,self.drivers_folder,self.drivers_folder,backup_path = backup_folder)
     nepi_ros.set_param(self,"~drvs_dict",drvs_dict)
     self.publish_status()
 
