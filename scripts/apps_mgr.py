@@ -103,6 +103,7 @@ class NepiAppsMgr(object):
     self.save_cfg_if.userReset()
     time.sleep(3)
     apps_dict = nepi_ros.get_param(self,"~apps_dict",dict())
+    apps_dict = nepi_apps.refreshAppsDict(self.apps_param_folder,apps_dict)
     app_dict = dict()
     #nepi_msg.publishMsgWarn(self,"Got init apps dict: " + str(apps_dict))
     for app_name in apps_dict:
@@ -366,9 +367,12 @@ class NepiAppsMgr(object):
         status_app_msg.active_state  = app['active']
         status_app_msg.order  = app['order']
         status_app_msg.msg_str = app['msg']
+        status_app_msg.license_type = app['APP_DICT']['license_type']
+        status_app_msg.license_link = app['APP_DICT']['license_link']
       except Exception as e:
         nepi_msg.publishMsgInfo(self,"Failed to create app status message: " + str(e))
     return status_app_msg
+
         
   # ln = sys._getframe().f_lineno ; 
   def printND(self):
@@ -453,6 +457,8 @@ class NepiAppsMgr(object):
         status_app_msg.active_state  = app['active']
         status_app_msg.order  = app['order']
         status_app_msg.msg_str = app['msg']
+        status_app_msg.license_type = app['APP_DICT']['license_type']
+        status_app_msg.license_link = app['APP_DICT']['license_link']
       except Exception as e:
         nepi_msg.publishMsgInfo(self,"Failed to create app status message: " + str(e))
 

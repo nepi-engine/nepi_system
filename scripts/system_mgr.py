@@ -76,8 +76,8 @@ class SystemMgrNode():
                             "tmp"]
     
     DRIVERS_PATH = '/opt/nepi/ros/lib/nepi_drivers'
-    DRIVERS_PARAMS_PATH = '/opt/nepi/ros/lib/nepi_drivers'
-    APPS_PARAMS_PATH = '/opt/nepi/ros/share/nepi_apps'
+    DRIVERS_PARAM_PATH = '/opt/nepi/ros/share/nepi_drivers/params'
+    APPS_PARAM_PATH = '/opt/nepi/ros/share/nepi_apps'
     AI_IF_FOLDER_PATH = '/opt/nepi/ros/share/nepi_aifs'
 
     # disk_usage_deque = deque(maxlen=10)
@@ -419,21 +419,21 @@ class SystemMgrNode():
         os.system('chown -R ' + str(self.storage_uid) + ':' + str(self.storage_gid) + ' ' + self.DRIVERS_PATH) # Use os.system instead of os.chown to have a recursive option
         os.system('chmod -R 0775 ' + self.DRIVERS_PATH)
 
-        self.storage_subdirs['drivers'] = self.DRIVERS_PARAMS_PATH
-        if not os.path.isdir(self.DRIVERS_PARAMS_PATH):
-                rospy.logwarn("Driver folder " + self.DRIVERS_PARAMS_PATH + " not present... will create")
-                os.makedirs(self.DRIVERS_PARAMS_PATH)
-        os.system('chown -R ' + str(self.storage_uid) + ':' + str(self.storage_gid) + ' ' + self.DRIVERS_PARAMS_PATH) # Use os.system instead of os.chown to have a recursive option
-        os.system('chmod -R 0775 ' + self.DRIVERS_PARAMS_PATH)
-        self.storage_subdirs['drivers'] = self.DRIVERS_PARAMS_PATH
+        self.storage_subdirs['drivers'] = self.DRIVERS_PARAM_PATH
+        if not os.path.isdir(self.DRIVERS_PARAM_PATH):
+                rospy.logwarn("Driver folder " + self.DRIVERS_PARAM_PATH + " not present... will create")
+                os.makedirs(self.DRIVERS_PARAM_PATH)
+        os.system('chown -R ' + str(self.storage_uid) + ':' + str(self.storage_gid) + ' ' + self.DRIVERS_PARAM_PATH) # Use os.system instead of os.chown to have a recursive option
+        os.system('chmod -R 0775 ' + self.DRIVERS_PARAM_PATH)
+        self.storage_subdirs['drivers'] = self.DRIVERS_PARAM_PATH
 
         # Do the same for the Apps Info Folder
-        if not os.path.isdir(self.APPS_PARAMS_PATH):
-                rospy.logwarn("Apps folder " + self.APPS_PARAMS_PATH + " not present... will create")
-                os.makedirs(self.APPS_PARAMS_PATH)
-        os.system('chown -R ' + str(self.storage_uid) + ':' + str(self.storage_gid) + ' ' + self.APPS_PARAMS_PATH) # Use os.system instead of os.chown to have a recursive option
-        os.system('chmod -R 0775 ' + self.APPS_PARAMS_PATH)
-        self.storage_subdirs['apps'] = self.APPS_PARAMS_PATH
+        if not os.path.isdir(self.APPS_PARAM_PATH):
+                rospy.logwarn("Apps folder " + self.APPS_PARAM_PATH + " not present... will create")
+                os.makedirs(self.APPS_PARAM_PATH)
+        os.system('chown -R ' + str(self.storage_uid) + ':' + str(self.storage_gid) + ' ' + self.APPS_PARAM_PATH) # Use os.system instead of os.chown to have a recursive option
+        os.system('chmod -R 0775 ' + self.APPS_PARAM_PATH)
+        self.storage_subdirs['apps'] = self.APPS_PARAM_PATH
         # Do the same for the AI IF Folder
         if not os.path.isdir(self.AI_IF_FOLDER_PATH):
                 rospy.logwarn("AIF folder " + self.AI_IF_FOLDER_PATH + " not present... will create")

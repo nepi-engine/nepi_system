@@ -75,6 +75,8 @@ class AIDetectorManager:
     classifier_class = None
     classifier_load_start_time = 0
     save_cfg_if = None
+
+    start = True
     #######################
     ### Node Initialization
     DEFAULT_NODE_NAME = "ai_detector_mgr" # Can be overwitten by luanch command
@@ -102,14 +104,10 @@ class AIDetectorManager:
         time.sleep(3)
         ## Find AI Frameworks
         # Get ai framework dict form param server and update
-        ais_dict = nepi_ais.getAIsDict(self.AI_SHARE_FOLDER)
+        get_ais_dict = nepi_ais.getAIsDict(self.AI_SHARE_FOLDER)
         #nepi_msg.publishMsgWarn(self,"Got ais dict " + str(ais_dict))
-        self.init_ais_dict = nepi_ros.get_param(self,'~ais_dict', ais_dict)
-        try:
-            self.init_ais_dict = nepi_ais.updateAIsDict(self.AI_SHARE_FOLDER,self.init_ais_dict)
-        except:
-            nepi_msg.publishMsgWarn(self,"Got bad ais_dict from param server so resetting")
-            self.init_ais_dict = ais_dict
+        ais_dict = nepi_ros.get_param(self,'~ais_dict', get_ais_dict)
+        self.init_ais_dict = nepi_ais.updateAIsDict(self.AI_SHARE_FOLDER,ais_dict)
         nepi_ros.set_param(self,'~ais_dict', self.init_ais_dict)
         #nepi_msg.publishMsgWarn(self,"Got updated ais dict from param server " + str(self.init_ais_dict))
         for ai_name in self.init_ais_dict.keys():
@@ -289,7 +287,7 @@ class AIDetectorManager:
             if self.current_img_topic != "None":
                 if self.classifier_state == ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED:
                     image_topic = nepi_ros.find_topic(self.current_img_topic)
-                    if image_topic != "":
+                    if image_topic != "" and self.start == True:
                         nepi_msg.publishMsgInfo(self,'Starting classifier with parameters [' + self.current_classifier + ', ' + self.current_img_topic + ', ' + str(self.current_threshold) + ']')
                         self.current_img_topic = image_topic
                         self.startClassifier(self.current_classifier, self.current_img_topic, self.current_threshold)
@@ -337,6 +335,7 @@ class AIDetectorManager:
 
 
     def startClassifier(self, classifier_name, source_img_topic, threshold):
+        self.start = False
         if classifier_name != "None":
             if source_img_topic != "None":
                 models_dict = nepi_ros.get_param(self,"~models_dict",self.init_models_dict)
@@ -405,11 +404,11 @@ class AIDetectorManager:
         self.stopClassifier()
         
     def stopClassifier(self):
-        self.current_classifier = "None"
-        self.current_classifier_classes = []
-        self.current_img_topic = "None"
-        nepi_ros.set_param(self,'~default_classifier',"None")
-        nepi_ros.set_param(self,'~default_image',"None")
+        #self.current_classifier = "None"
+        #self.current_classifier_classes = []
+        #self.current_img_topic = "None"
+        #nepi_ros.set_param(self,'~default_classifier',"None")
+        #nepi_ros.set_param(self,'~default_image',"None")
         if self.classifier_class != None and self.classifier_state != ImageClassifierStatusQueryResponse.CLASSIFIER_STATE_STOPPED:
             self.classifier_class.stopClassifier()
             time.sleep(1)

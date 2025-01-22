@@ -32,8 +32,8 @@ from nepi_ros_interfaces.srv import DriverStatusQuery, DriverStatusQueryResponse
 from nepi_edge_sdk_base.save_cfg_if import SaveCfgIF
 
 DRIVERS_FOLDER = '/opt/nepi/ros/lib/nepi_drivers'
-DRIVERS_PARAM_FOLDER = '/opt/nepi/ros/lib/nepi_drivers'
-DRIVERS_INSTALL_FOLDER = '/opt/nepi/ros/lib/nepi_drivers'
+DRIVERS_PARAM_FOLDER = '/opt/nepi/ros/share/nepi_drivers/params'
+DRIVERS_INSTALL_FOLDER = '/mnt/nepi_storage/tmp'
 #########################################
 
 #########################################

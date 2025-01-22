@@ -672,7 +672,7 @@ class NetworkMgr:
 
     def handle_ip_addr_query(self, req):
         ips = self.get_current_ip_addrs()
-        return {'in_container': self.in_container, 'ip_addrs':ips, 'dhcp_enabled': self.dhcp_enabled}
+        return {'ip_addrs':ips, 'dhcp_enabled': self.dhcp_enabled}
 
     def handle_bandwidth_usage_query(self, req):
         tx_rate_mbps = 0
